@@ -109,7 +109,11 @@ Rules:
   apologies or extra sentences.
 - Start the body with a greeting line and end with a closing line, in the same language as
   the text (English: "Hi," and "Thanks,"; Malayalam: "നമസ്കാരം," and "നന്ദി,").
-- Subject: 2-6 words taken from the text itself, same language.
+- Subject: a short, natural email subject (2-6 words, same language) that sums up the text.
+  Reword it a little so it reads like a real subject line (e.g. "I will not come tomorrow"
+  -> "Not coming tomorrow", "work is finished" -> "Work completed", "send the report" ->
+  "Request for the report"), but add no new information and keep who does what: a request
+  stays a request, something you did stays something you did.
 Reply with ONLY JSON: {{"subject": "...", "body": "..."}}"""
 
 
