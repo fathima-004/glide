@@ -15,6 +15,18 @@ def test_quick_whatsapp_syntax():
     assert agent.quick_whatsapp("wow nice") is None
 
 
+def test_mail_recipient_comes_from_what_was_written():
+    agent.handwriting.ask_json = lambda prompt: {"subject": "Work done", "body": "The work is done.\n\nThanks,"}
+    p = agent.quick_mail("mail rashrahn work done")
+    assert p["to"] == "rashrahn@gmail.com" and p["subject"] == "Work done"
+    assert agent.quick_mail("email Someone@college.edu report sent")["to"] == "Someone@college.edu"
+    assert agent.quick_mail("m-rashrahn ok")["to"] == "rashrahn@gmail.com"
+    agent.handwriting.ask_json = lambda prompt: None  # AI down: still sends something sensible
+    p = agent.quick_mail("mail rashrahn work done")
+    assert p["to"] == "rashrahn@gmail.com" and p["subject"] == "Work done"
+    assert agent.quick_mail("w-didi varam") is None
+
+
 def test_direct_commands_skip_cards():
     assert writer.is_direct_command("w-didi varam")
     assert writer.is_direct_command("mail rashid work completed")
@@ -34,6 +46,7 @@ def test_countdown_can_be_cancelled():
 
 if __name__ == "__main__":
     test_quick_whatsapp_syntax()
+    test_mail_recipient_comes_from_what_was_written()
     test_direct_commands_skip_cards()
     test_countdown_can_be_cancelled()
     print("ok agent")

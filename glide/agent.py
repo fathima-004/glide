@@ -70,8 +70,29 @@ def quick_whatsapp(goal):
     return {"action": "whatsapp", "contact": name, "message": msg, "say": f"WhatsApp {name}: {msg}"}
 
 
+MAIL = re.compile(r"^\s*(mail|email|e-mail|m)\s*[-:.–—]?\s*(\S+)\s+(.+)$", re.I | re.S)
+
+MAIL_PROMPT = """Write a short, polite email from these few words: "{what}".
+Reply with ONLY JSON: {{"subject": "<3-6 word subject>", "body": "<2-3 sentence email body, no greeting name, end with Thanks,>"}}"""
+
+
+def quick_mail(goal):
+    """'mail rashrahn work done' -> to rashrahn@gmail.com. The recipient is taken exactly from
+    what was written (a word becomes <word>@gmail.com); only subject/body come from the AI."""
+    m = MAIL.match(goal)
+    if not m:
+        return None
+    who, what = m.group(2).strip().strip(",.:"), m.group(3).strip()
+    to = who if "@" in who else who.lower() + "@gmail.com"
+    written = handwriting.ask_json(MAIL_PROMPT.format(what=what)) or {}
+    subject = written.get("subject") or what[:1].upper() + what[1:]
+    body = written.get("body") or what[:1].upper() + what[1:] + ".\n\nThanks,"
+    return {"action": "gmail", "to": to, "to_name": "", "subject": subject,
+            "body": f"Hi,\n\n{body}", "say": f"Mail {to}: {subject}"}
+
+
 def plan(goal):
-    quick = quick_whatsapp(goal)
+    quick = quick_whatsapp(goal) or quick_mail(goal)
     if quick:
         return quick
     c = contacts()
