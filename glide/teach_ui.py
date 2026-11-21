@@ -9,17 +9,17 @@ CYAN, GOLD = "#39f5ff", "#ffd23f"
 
 def open_teach_window(root, engine):
     win = tk.Toplevel(root)
-    win.title("Teach Thottu a new shape")
+    win.title("Teach Glide a new shape")
     win.configure(bg=BG)
     win.attributes("-topmost", True)
     w, h = 460, 560
     win.geometry(f"{w}x{h}+{(win.winfo_screenwidth() - w) // 2}+{(win.winfo_screenheight() - h) // 2}")
     win.resizable(False, False)
 
-    tk.Label(win, text="Teach Thottu a new shape", bg=BG, fg=FG,
+    tk.Label(win, text="Teach Glide a new shape", bg=BG, fg=FG,
              font=("Segoe UI Semibold", 18)).pack(anchor="w", padx=24, pady=(22, 2))
     tk.Label(win, text="Pick what it should do, then draw your shape 3 times.\n"
-                       "Draw it your way — Thottu learns your hand.",
+                       "Draw it your way — Glide learns your hand.",
              bg=BG, fg=MUTED, justify="left", font=("Segoe UI", 11)).pack(anchor="w", padx=24)
 
     choice = tk.IntVar(value=0)

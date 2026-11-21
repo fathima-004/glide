@@ -5,7 +5,7 @@ import random
 import tempfile
 import time
 
-from thottu import gestures, shapes
+from glide import gestures, shapes
 from tests.test_engine import make_engine, lift
 
 

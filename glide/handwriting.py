@@ -1,6 +1,6 @@
 """Finger handwriting -> text, using Gemini to read an image of the strokes.
 
-    python -m thottu.handwriting demo.json   # strokes from JSON, prints the result
+    python -m glide.handwriting demo.json   # strokes from JSON, prints the result
 """
 import base64
 import io

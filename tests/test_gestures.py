@@ -2,7 +2,7 @@
 import math
 import random
 
-from thottu.gestures import TEMPLATES, recognise
+from glide.gestures import TEMPLATES, recognise
 
 
 def wobble(pts, amount, sx, sy, seed):

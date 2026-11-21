@@ -119,7 +119,7 @@ class Overlay:
 
         lbl = eng.pop_label()
         if lbl:
-            self.show_label(lbl, eng.anchor if eng.anchor and lbl not in ("Thottu ON", "Thottu OFF")
+            self.show_label(lbl, eng.anchor if eng.anchor and lbl not in ("Glide ON", "Glide OFF")
                             else (self.sw // 2, self.sh // 2))
         if self.label and now < self.label_until:
             x, y = self.label_pos

@@ -1,6 +1,6 @@
-"""Your own shapes: draw any shape 3 times, attach an action, and Thottu learns your hand.
+"""Your own shapes: draw any shape 3 times, attach an action, and Glide learns your hand.
 
-Saved in %APPDATA%\\Thottu\\shapes.json as
+Saved in %APPDATA%\\Glide\\shapes.json as
     [{"label": "WhatsApp", "action": {"type": "open", "value": "whatsapp:"}, "samples": [[[x, y], ...], ...]}]
 """
 import json
@@ -10,7 +10,7 @@ import webbrowser
 
 from . import actions
 
-PATH = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), "Thottu", "shapes.json")
+PATH = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), "Glide", "shapes.json")
 SAMPLES_NEEDED = 3
 
 # What a shape can do. "value" is filled from the dialog for the "…" ones.

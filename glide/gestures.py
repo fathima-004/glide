@@ -12,7 +12,7 @@ import time
 
 from . import actions, shapes
 
-LOG_PATH = os.path.join(tempfile.gettempdir(), "thottu.log")
+LOG_PATH = os.path.join(tempfile.gettempdir(), "glide.log")
 
 
 def log(msg):

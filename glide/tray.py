@@ -18,7 +18,7 @@ class Tray:
     def __init__(self, state):
         self.state = state  # object with .enabled and .toggle()
         self.icon = pystray.Icon(
-            "thottu", _icon(True), "Thottu (on)",
+            "glide", _icon(True), "Glide (on)",
             menu=pystray.Menu(
                 pystray.MenuItem(lambda _: "Turn OFF   (Ctrl+Alt+T)" if self.state.enabled
                                  else "Turn ON   (Ctrl+Alt+T)", self._toggle, default=True),
@@ -34,7 +34,7 @@ class Tray:
 
     def refresh(self):
         self.icon.icon = _icon(self.state.enabled)
-        self.icon.title = "Thottu (on)" if self.state.enabled else "Thottu (off)"
+        self.icon.title = "Glide (on)" if self.state.enabled else "Glide (off)"
         self.icon.update_menu()
 
     def start(self):

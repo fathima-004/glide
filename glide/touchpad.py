@@ -208,7 +208,7 @@ class TouchpadReader(threading.Thread):
                 print("touchpad parse error:", e)
             return user32.DefWindowProcW(hwnd, msg, wparam, lparam)
         if msg == 0x0312:  # WM_HOTKEY
-            if wparam == 1:  # Ctrl+Alt+Q quits Thottu
+            if wparam == 1:  # Ctrl+Alt+Q quits Glide
                 import os
                 os._exit(0)
             if wparam == 2 and self.on_toggle:  # Ctrl+Alt+T turns it on/off
@@ -248,9 +248,9 @@ class TouchpadReader(threading.Thread):
         wc = WNDCLASSW()
         wc.lpfnWndProc = self._proc
         wc.hInstance = hinst
-        wc.lpszClassName = "ThottuTouchpadSink"
+        wc.lpszClassName = "GlideTouchpadSink"
         user32.RegisterClassW(ctypes.byref(wc))
-        self.hwnd = user32.CreateWindowExW(0, wc.lpszClassName, "Thottu", 0, 0, 0, 0, 0,
+        self.hwnd = user32.CreateWindowExW(0, wc.lpszClassName, "Glide", 0, 0, 0, 0, 0,
                                            None, None, hinst, None)  # hidden top-level window
         rid = RAWINPUTDEVICE(PAGE_DIGITIZER, USAGE_TOUCHPAD, RIDEV_INPUTSINK, self.hwnd)
         if not user32.RegisterRawInputDevices(ctypes.byref(rid), 1, ctypes.sizeof(rid)):
