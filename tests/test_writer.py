@@ -201,6 +201,34 @@ def test_name_is_remembered_across_write_sessions():
     writer.in_whatsapp_web = lambda: False
 
 
+def test_whatsapp_word_by_word():
+    """On a small pad you write one word at a time: Baba (pause) varaam (pause) ... stop 2 s."""
+    from glide import agent
+    opened = []
+    agent.open_chat = lambda contact, status: opened.append(contact)
+    writer.in_whatsapp_web = lambda: True
+    writer.threading.Thread = _InlineThread
+    sarvam.manglish_to_malayalam = lambda t: "വരാം"
+    sarvam.translate = lambda t, s, d: "I will come"
+    readings = iter([{"text": "Baba", "language": "english"}, {"text": "varaam", "language": "manglish"}])
+    handwriting.recognise = lambda png: next(readings)
+    eng, rec = make_engine({})
+    w = eng.writer
+    w.start((0, 0))
+    w._await_release = False
+    t = time.time()
+    for k in range(2):                       # two words, each followed by a short pause
+        w.strokes, w._touching, w._last_change = [[(0, 0), (1, 1)]], False, t - 1.5
+        w.tick(t)
+        assert w.mode == "writing" and w.strokes == []
+    assert w.words_so_far == ["Baba", "varaam"] and opened == []  # nothing opens while writing
+    w.tick(time.time() + writer.FINISH_AFTER + 1)  # stop writing: use the words
+    assert opened == ["Baba"] and w.wa_contact == "Baba"
+    assert w.choices == [("English", "I will come"), (writer.MAL, "വരാം"),
+                         (writer.VOICE, "വരാം")]
+    writer.in_whatsapp_web = lambda: False
+
+
 def test_arabic_options():
     writer.threading.Thread = threading_Thread
     handwriting.ask_json = lambda prompt: {"english": "I will come tomorrow"}
@@ -304,5 +332,7 @@ if __name__ == "__main__":
     print("ok arabic")
     test_name_is_remembered_across_write_sessions()
     print("ok name remembered across sessions")
+    test_whatsapp_word_by_word()
+    print("ok whatsapp word by word")
     test_slant_swipes_pick_the_app()
     print("ok slant swipes")

@@ -19,6 +19,7 @@ IDLE_TO_READ = 1.1     # seconds after last stroke before reading
 NOTHING_WRITTEN = 6.0  # leave write mode if nothing is written
 WAIT_FOR_MESSAGE = 20.0  # after a name/address, this long to start writing the message
 PENDING_SECONDS = 90.0   # a name stays chosen this long, even across write sessions
+FINISH_AFTER = 2.0       # WhatsApp/Gmail: stop writing this long and the words are used
 CHOICE_TIMEOUT = 10.0
 DWELL = 0.8           # seconds on a card to type it
 SWIPE_TIME = 0.7      # a slant swipe is quick...
@@ -206,6 +207,7 @@ class Writer:
         self.in_gmail = False
         self.mail_to = None       # in Gmail: the address made from the first word
         self._pending = None      # (kind, who, time): a name written whose message hasn't been sent
+        self.word_jobs = []       # WhatsApp/Gmail: words read one by one while writing
         self.header = ""          # shown above the cards, e.g. "To: Rashid"
         self._swipe = None        # (x, y, time) where the current touch started, for slant swipes
 
@@ -225,6 +227,7 @@ class Writer:
             elif kind == "mail" and self.in_gmail:
                 self.mail_to, self.header = who, f"To: {who}"
         self.mode, self.strokes, self.choices, self.anchor = "writing", [], [], anchor
+        self.word_jobs = []
         self._last_change, self._touching = time.time(), False
         self._await_release = True  # the two fingers that opened write mode are still down
         actions_log("write mode")
@@ -508,11 +511,22 @@ class Writer:
         """Called ~60x/s from the overlay; handles timeouts with no finger frames."""
         if self.mode == "writing":
             wait = WAIT_FOR_MESSAGE if (self.wa_contact or self.mail_to) else NOTHING_WRITTEN
-            if not self.strokes and now - self._last_change > wait:
+            if not self.strokes and not self.word_jobs and now - self._last_change > wait:
                 self.cancel("Write mode off" if not (self.wa_contact or self.mail_to) else
                             f"Write mode off — {self.wa_contact or self.mail_to} is still chosen "
                             f"for {int(PENDING_SECONDS)} s")
-            elif self.strokes and not self._touching and now - self._last_change > IDLE_TO_READ:
+            elif self.word_by_word and self.strokes and not self._touching \
+                    and now - self._last_change > IDLE_TO_READ:
+                job = {"done": False, "text": None, "language": None}  # one word, read in the background
+                self.word_jobs.append(job)
+                threading.Thread(target=self._read_word, args=(job, list(self.strokes)), daemon=True).start()
+                self.strokes, self._last_change = [], now
+            elif self.word_by_word and not self.strokes and self.word_jobs and not self._touching \
+                    and now - self._last_change > FINISH_AFTER and all(j["done"] for j in self.word_jobs):
+                self.mode = "reading"
+                threading.Thread(target=self._finish_words, daemon=True).start()
+            elif not self.word_by_word and self.strokes and not self._touching \
+                    and now - self._last_change > IDLE_TO_READ:
                 self.mode = "reading"
                 threading.Thread(target=self._read, args=(list(self.strokes),), daemon=True).start()
         elif self.mode == "choosing" and now - self._last_change > CHOICE_TIMEOUT \
@@ -534,6 +548,48 @@ class Writer:
         if not result:
             self.cancel("Couldn't read that — try bigger")
             return
+        self._handle(result)
+
+    @property
+    def word_by_word(self):
+        """In WhatsApp/Gmail you write several words on the same small pad: read them one by one."""
+        return self.in_whatsapp or self.in_gmail
+
+    @property
+    def words_so_far(self):
+        return [j["text"] or "\u2026" for j in self.word_jobs]
+
+    def _read_word(self, job, strokes):
+        try:
+            res = handwriting.recognise(handwriting.strokes_to_png(strokes))
+        except Exception as e:
+            print("handwriting failed:", e)
+            res = None
+        if res:
+            job["text"], job["language"] = res["text"], res.get("language")
+        job["done"] = True
+
+    def _finish_words(self):
+        """All words read: first = contact / address (unless already chosen), the rest = message."""
+        words = [j for j in self.word_jobs if j["text"]]
+        self.word_jobs = []
+        if not words:
+            self.cancel("Couldn't read that \u2014 try bigger")
+            return
+        text = " ".join(j["text"] for j in words)
+        msg_langs = [j["language"] for j in (words if (self.wa_contact or self.mail_to) else words[1:])]
+        if any("\u0600" <= ch <= "\u06ff" for ch in text):
+            lang = "arabic"
+        elif "manglish" in msg_langs:
+            lang = "manglish"
+        elif msg_langs and all(l == "english" for l in msg_langs):
+            lang = "english"
+        else:
+            lang = "unknown"
+        self._handle({"text": text, "script": "latin", "language": lang, "alternatives": []})
+
+    def _handle(self, result):
+        """Turn a reading into options (and, in WhatsApp/Gmail, a contact/address + message)."""
         if DIRECT_COMMANDS and is_direct_command(result["text"]):  # "w-didi ..", "mail ..": do it
             actions_log(f"direct command: {result['text']}")
             self.mode, self.agent_status = "agent", "⚡ " + result["text"]

@@ -143,16 +143,24 @@ class Overlay:
         y0 = ay - bh - 70 if ay - bh - 70 > 20 else ay + 50
         if wr.mode in ("writing", "reading"):
             # no board: the ink is written straight over the screen, with a small hint above it
+            words = wr.words_so_far if wr.word_by_word else []
             if wr.mode == "reading":
                 title = "Reading with Gemma…"
+            elif words:  # WhatsApp/Gmail: show what has been read so far
+                who = wr.wa_contact or wr.mail_to
+                if who:
+                    title = f"To: {who}  ·  {' '.join(words)}"
+                else:
+                    title = f"To: {words[0]}  ·  {' '.join(words[1:]) or '…'}"
+                title = "✍ " + title + "      (stop for 2 s when done)"
             elif wr.wa_contact:
                 title = f"✍ Now write the message for {wr.wa_contact}"
             elif wr.in_whatsapp:
-                title = "✍ Write the name, then the message"
+                title = "✍ Write the name, then the message — one word at a time"
             elif wr.mail_to:
                 title = f"✍ Now write the mail for {wr.mail_to}"
             elif wr.in_gmail:
-                title = "✍ Write the email name, then the mail"
+                title = "✍ Write the email name, then the mail — one word at a time"
             else:
                 title = "✍ Write a word"
             col = "#7cff6b" if wr.wa_contact else "#ff6fd8" if wr.mail_to else CYAN
