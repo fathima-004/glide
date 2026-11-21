@@ -3,7 +3,6 @@
 
 Ctrl+Alt+T turns Thottu on/off.  Ctrl+Alt+Q quits."""
 import ctypes
-import queue
 import sys
 import time
 
@@ -19,6 +18,9 @@ class State:
 
     def toggle(self):
         self.enabled = not self.enabled
+        if self.engine.state == "drag":  # never leave the mouse button stuck down
+            from . import actions
+            actions.mouse_up()
         self.engine.state, self.engine.stroke = "idle", []
         self.engine._say("Thottu ON" if self.enabled else "Thottu OFF")
         if self.tray:
@@ -32,7 +34,6 @@ def main():
         pass
 
     debug = "--debug" in sys.argv
-    frames = queue.Queue()
     engine = GestureEngine()
     state = State(engine)
 
@@ -46,8 +47,6 @@ def main():
                 print(">>> GESTURE:", lbl, flush=True)
             print(" | ".join(f"id{c['id']} {'DOWN' if c['tip'] else 'up  '} "
                              f"x={c['x']:.3f} y={c['y']:.3f}" for c in contacts), flush=True)
-        else:
-            frames.put((contacts, aspect))
 
     reader = TouchpadReader(on_frame, on_toggle=state.toggle)
     reader.start()
@@ -72,7 +71,7 @@ def main():
 
     from .overlay import Overlay
     engine._say("Thottu ON")
-    Overlay(frames, engine).run()
+    Overlay(engine).run()
 
 
 if __name__ == "__main__":

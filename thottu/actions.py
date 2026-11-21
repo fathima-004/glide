@@ -1,10 +1,11 @@
-"""Keyboard shortcuts and cursor helpers, sent with plain Win32 calls."""
+"""Keyboard shortcuts, mouse and cursor helpers, sent with plain Win32 calls."""
 import ctypes
 import time
 from ctypes import wintypes as wt
 
 user32 = ctypes.windll.user32
 KEYUP = 0x0002
+MOUSE_LEFTDOWN, MOUSE_LEFTUP = 0x0002, 0x0004
 
 VK = {"ctrl": 0x11, "alt": 0x12, "shift": 0x10, "win": 0x5B, "enter": 0x0D,
       "tab": 0x09, "printscreen": 0x2C, "c": 0x43, "v": 0x56, "z": 0x5A, "s": 0x53}
@@ -29,6 +30,26 @@ def get_cursor():
 def restore_cursor(pos):
     if pos:
         user32.SetCursorPos(*pos)
+
+
+def screen_size():
+    return user32.GetSystemMetrics(0), user32.GetSystemMetrics(1)
+
+
+def mouse_down():
+    user32.mouse_event(MOUSE_LEFTDOWN, 0, 0, 0, 0)
+
+
+def mouse_up():
+    user32.mouse_event(MOUSE_LEFTUP, 0, 0, 0, 0)
+
+
+def move_by(dx, dy):
+    """Move the cursor by whole pixels, clamped to the screen."""
+    x, y = get_cursor()
+    w, h = screen_size()
+    user32.SetCursorPos(min(max(int(round(x + dx)), 0), w - 1),
+                        min(max(int(round(y + dy)), 0), h - 1))
 
 
 ACTIONS = {

@@ -27,6 +27,7 @@ HOLD_SLOP = 0.015    # how far (pad fraction) the finger may wander while holdin
 MIN_STROKE = 0.08    # shortest stroke (pad fraction) we try to recognise
 N_POINTS = 64
 MATCH_THRESHOLD = 0.30
+DRAG_GAIN = 1.4      # full pad width moves the cursor 1.4 screen widths
 
 
 # ---------- templates ----------
@@ -123,6 +124,9 @@ class GestureEngine:
         self._t0 = 0.0
         self._p0 = (0.0, 0.0)
         self._cursor0 = None
+        self.anchor = None       # screen point where the drawing is shown
+        self._drag_last = {}     # contact id -> (x, y) during three-finger drag
+        self._drag_rem = [0.0, 0.0]
         self._label = None
         self._lock = threading.Lock()
 
@@ -145,7 +149,14 @@ class GestureEngine:
                 self._finish()
             elif self.state in ("hold", "armed"):
                 log(f"lifted while {self.state} after {now - self._t0:.2f}s (no drawing)")
+            elif self.state == "drag":
+                actions.mouse_up()
+                log("drag end")
             self.state, self.stroke = "idle", []
+            return
+
+        if self.state == "drag" or len(down) >= 3:
+            self._drag(down)
             return
 
         if len(down) > 1:
@@ -166,6 +177,7 @@ class GestureEngine:
             elif now - self._t0 >= HOLD_TIME:
                 self.state, self.stroke = "armed", [p]
                 self._cursor0 = actions.get_cursor()
+                self.anchor = self._cursor0
                 log("armed: draw mode")
         elif self.state == "armed":
             self.stroke.append(p)
@@ -173,6 +185,32 @@ class GestureEngine:
                 self.state = "drawing"
         elif self.state == "drawing":
             self.stroke.append(p)
+
+    def _drag(self, down):
+        """Three fingers: hold the left button and move the cursor. Lifting all fingers drops."""
+        pos = {c["id"]: (c["x"], c["y"]) for c in down}
+        if self.state != "drag":
+            if self.state in ("hold", "armed", "drawing"):
+                actions.restore_cursor(self._cursor0)
+            self.state, self.stroke = "drag", []
+            self._drag_last, self._drag_rem = pos, [0.0, 0.0]
+            actions.mouse_down()
+            log("drag start")
+            return
+        common = [i for i in pos if i in self._drag_last]
+        if common:
+            w, _ = actions.screen_size()
+            gain = w * DRAG_GAIN
+            dx = sum(pos[i][0] - self._drag_last[i][0] for i in common) / len(common)
+            dy = sum(pos[i][1] - self._drag_last[i][1] for i in common) / len(common)
+            self._drag_rem[0] += dx * gain
+            self._drag_rem[1] += dy * gain / self.aspect  # pad y spans fewer mm than x
+            mx, my = int(self._drag_rem[0]), int(self._drag_rem[1])
+            if mx or my:
+                self._drag_rem[0] -= mx
+                self._drag_rem[1] -= my
+                actions.move_by(mx, my)
+        self._drag_last = pos
 
     def _finish(self):
         actions.restore_cursor(self._cursor0)

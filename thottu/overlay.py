@@ -1,17 +1,23 @@
-"""Glowing finger-trail overlay so the audience can see what's drawn on the touchpad.
+"""On-screen feedback, drawn right at the mouse cursor (where you're already looking).
 
-A full-screen, transparent, click-through, always-on-top Tk window. A "pad"
-panel in the bottom-right mirrors the touchpad: finger dots plus fading trails.
+- Holding still: a ring around the cursor fills up -> draw mode
+- Drawing: your shape appears in glowing gold at the cursor
+- After: a big word ("Copied") pops up at the cursor
+- Three-finger drag: a "Dragging" tag follows the cursor
+
+A full-screen, transparent, click-through, always-on-top Tk window.
 """
 import ctypes
-import queue
 import time
 import tkinter as tk
 
+from . import actions
+from .gestures import HOLD_TIME
+
 KEY = "#010101"  # transparent colour key
-FINGER_COLORS = ["#39f5ff", "#ff4fd8", "#ffd23f", "#7cff6b", "#ff8a3d"]
-TRAIL_LEN = 60
-FADE_AFTER = 1.2  # seconds after last touch before the pad hides
+GOLD, GOLD_GLOW = "#ffd23f", "#5c4a10"
+CYAN = "#39f5ff"
+SHAPE_SIZE = 0.45  # drawn shape height as a fraction of screen height (pad height -> this)
 
 GWL_EXSTYLE = -20
 WS_EX_LAYERED = 0x00080000
@@ -20,14 +26,8 @@ WS_EX_TOOLWINDOW = 0x00000080
 WS_EX_NOACTIVATE = 0x08000000
 
 
-def _dim(hex_color, f):
-    r, g, b = (int(hex_color[i:i + 2], 16) for i in (1, 3, 5))
-    return "#%02x%02x%02x" % (max(int(r * f), 2), max(int(g * f), 2), max(int(b * f), 2))
-
-
 class Overlay:
-    def __init__(self, frames: "queue.Queue", engine=None):
-        self.frames = frames
+    def __init__(self, engine):
         self.engine = engine
         self.root = tk.Tk()
         self.root.overrideredirect(True)
@@ -39,13 +39,7 @@ class Overlay:
         self.canvas.pack(fill="both", expand=True)
         self.root.update_idletasks()
         self._make_click_through()
-
-        self.aspect = 1.6
-        self.trails = {}  # contact id -> list of (x, y)
-        self.live = []
-        self.last_touch = 0.0
-        self.label = ""
-        self.label_until = 0.0
+        self.label, self.label_until, self.label_pos = "", 0.0, (0, 0)
 
     def _make_click_through(self):
         hwnd = ctypes.windll.user32.GetParent(self.root.winfo_id())
@@ -53,89 +47,60 @@ class Overlay:
         style |= WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE
         ctypes.windll.user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style)
 
-    def show_label(self, text, seconds=1.5):
-        """Big caption above the pad, e.g. 'Copied' after drawing C."""
-        self.label, self.label_until = text, time.time() + seconds
+    def show_label(self, text, pos, seconds=1.4):
+        self.label, self.label_pos, self.label_until = text, pos, time.time() + seconds
 
-    def _pad_rect(self):
-        w = int(self.sw * 0.30)
-        h = int(w / self.aspect)
-        m = int(self.sw * 0.02)
-        x0, y0 = self.sw - w - m, self.sh - h - m - 40  # stay above the taskbar
-        return x0, y0, x0 + w, y0 + h
-
-    def _drain(self):
-        while True:
-            try:
-                contacts, aspect = self.frames.get_nowait()
-            except queue.Empty:
-                break
-            self.aspect = aspect
-            self.live = [c for c in contacts if c["tip"]]
-            if self.live:
-                self.last_touch = time.time()
-            live_ids = set()
-            for c in self.live:
-                live_ids.add(c["id"])
-                t = self.trails.setdefault(c["id"], [])
-                t.append((c["x"], c["y"]))
-                del t[:-TRAIL_LEN]
-            for cid in list(self.trails):
-                if cid not in live_ids:
-                    # let lifted trails shrink away instead of vanishing
-                    self.trails[cid] = self.trails[cid][3:]
-                    if not self.trails[cid]:
-                        del self.trails[cid]
+    def _pill(self, x, y, text, color, size=13):
+        t = self.canvas.create_text(x, y, text=text, fill=color, font=("Segoe UI Semibold", size))
+        x0, y0, x1, y1 = self.canvas.bbox(t)
+        r = self.canvas.create_rectangle(x0 - 10, y0 - 5, x1 + 10, y1 + 5, fill="#0b1118",
+                                         outline=color, width=2)
+        self.canvas.tag_raise(t, r)
 
     def _draw(self):
-        cv = self.canvas
+        cv, eng = self.canvas, self.engine
         cv.delete("all")
         now = time.time()
-        visible = (now - self.last_touch) < FADE_AFTER or self.trails
-        state = self.engine.state if self.engine else "idle"
-        drawing = state in ("armed", "drawing")
-        if visible:
-            x0, y0, x1, y1 = self._pad_rect()
-            cv.create_rectangle(x0, y0, x1, y1, outline="#ffd23f" if drawing else "#3a4a5c",
-                                width=3 if drawing else 2, fill="#0b1118")
-            cv.create_text(x0 + 12, y0 + 12, anchor="nw",
-                           text="DRAW A SHORTCUT" if drawing else "THOTTU",
-                           fill="#ffd23f" if drawing else "#56708a", font=("Segoe UI Semibold", 11))
-            w, h = x1 - x0, y1 - y0
-            if drawing:
-                stroke = list(self.engine.stroke)
-                if len(stroke) > 1:
-                    a = self.engine.aspect or 1.6
-                    flat = [v for px, py in stroke for v in (x0 + px / a * w, y0 + py * h)]
-                    cv.create_line(*flat, fill="#5c4a10", width=22, capstyle="round",
+        cx, cy = actions.get_cursor()
+        state = eng.state
+
+        if state == "hold":
+            frac = min((now - eng._t0) / HOLD_TIME, 1.0)
+            if frac > 0.15:  # don't flash on every normal touch
+                r = 26
+                cv.create_oval(cx - r, cy - r, cx + r, cy + r, outline="#3a4a5c", width=5)
+                cv.create_arc(cx - r, cy - r, cx + r, cy + r, start=90, extent=-359.9 * frac,
+                              style="arc", outline=GOLD, width=5)
+
+        elif state in ("armed", "drawing"):
+            ax, ay = eng.anchor or (cx, cy)
+            stroke = list(eng.stroke)
+            scale = self.sh * SHAPE_SIZE
+            if stroke:
+                sx, sy = stroke[0]
+                pts = [(ax + (px - sx) * scale, ay + (py - sy) * scale) for px, py in stroke]
+                if len(pts) > 1:
+                    flat = [v for p in pts for v in p]
+                    cv.create_line(*flat, fill=GOLD_GLOW, width=24, capstyle="round",
                                    joinstyle="round", smooth=True)
-                    cv.create_line(*flat, fill="#ffd23f", width=7, capstyle="round",
+                    cv.create_line(*flat, fill=GOLD, width=8, capstyle="round",
                                    joinstyle="round", smooth=True)
-            for i, (cid, pts) in enumerate(sorted(self.trails.items())):
-                col = FINGER_COLORS[i % len(FINGER_COLORS)]
-                xy = [(x0 + px * w, y0 + py * h) for px, py in pts]
-                if len(xy) > 1:
-                    flat = [v for p in xy for v in p]
-                    cv.create_line(*flat, fill=_dim(col, 0.35), width=14, capstyle="round",
-                                   joinstyle="round", smooth=True)
-                    cv.create_line(*flat, fill=col, width=4, capstyle="round",
-                                   joinstyle="round", smooth=True)
-            for i, c in enumerate(sorted(self.live, key=lambda c: c["id"])):
-                col = FINGER_COLORS[i % len(FINGER_COLORS)]
-                cx, cy = x0 + c["x"] * w, y0 + c["y"] * h
-                cv.create_oval(cx - 18, cy - 18, cx + 18, cy + 18, outline=_dim(col, 0.5), width=6)
-                cv.create_oval(cx - 8, cy - 8, cx + 8, cy + 8, fill=col, outline="")
+                ex, ey = pts[-1]
+                cv.create_oval(ex - 10, ey - 10, ex + 10, ey + 10, fill="#ffffff", outline="")
+            self._pill(ax, ay - 46, "DRAW A SHORTCUT", GOLD)
+
+        elif state == "drag":
+            self._pill(cx + 70, cy + 34, "✋ Dragging", CYAN)
+
+        lbl = eng.pop_label()
+        if lbl:
+            self.show_label(lbl, eng.anchor if eng.anchor and lbl not in ("Thottu ON", "Thottu OFF")
+                            else (self.sw // 2, self.sh // 2))
         if self.label and now < self.label_until:
-            x0, y0, x1, _ = self._pad_rect()
-            cv.create_text((x0 + x1) / 2, y0 - 34, text=self.label, fill="#ffffff",
-                           font=("Segoe UI Black", 26))
+            x, y = self.label_pos
+            self._pill(x, y - 60, self.label, "#ffffff", size=26)
 
     def _tick(self):
-        self._drain()
-        if self.engine:
-            lbl = self.engine.pop_label()
-            if lbl:
-                self.show_label(lbl)
         self._draw()
         self.root.after(16, self._tick)
 
