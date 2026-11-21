@@ -73,7 +73,11 @@ def quick_whatsapp(goal):
 MAIL = re.compile(r"^\s*(mail|email|e-mail|m)\s*[-:.–—]?\s*(\S+)\s+(.+)$", re.I | re.S)
 
 MAIL_PROMPT = """Write a short, polite email from these few words: "{what}".
-Reply with ONLY JSON: {{"subject": "<3-6 word subject>", "body": "<2-3 sentence email body, no greeting name, end with Thanks,>"}}"""
+The words may be English, Malayalam script, or Manglish (Malayalam typed in English letters,
+e.g. "pani kazhinju" = "the work is finished").
+Reply with ONLY JSON, writing subject and body in ENGLISH:
+{{"subject": "<3-6 word subject>", "body": "<2-3 sentence email body, no greeting name, end with Thanks,>",
+  "language": "ml" if the words were Malayalam script or Manglish, else "en"}}"""
 
 
 def quick_mail(goal):
@@ -85,10 +89,20 @@ def quick_mail(goal):
     who, what = m.group(2).strip().strip(",.:"), m.group(3).strip()
     to = who if "@" in who else who.lower() + "@gmail.com"
     written = handwriting.ask_json(MAIL_PROMPT.format(what=what)) or {}
+    is_mal_script = any("ഀ" <= ch <= "ൿ" for ch in what)
     subject = written.get("subject") or what[:1].upper() + what[1:]
     body = written.get("body") or what[:1].upper() + what[1:] + ".\n\nThanks,"
+    greeting = "Hi,"
+    if written.get("language") == "ml" or is_mal_script:
+        # Malayalam in -> Malayalam out, written by Sarvam
+        if written.get("subject"):
+            subject = sarvam.translate(subject, "en-IN", "ml-IN") or subject
+            body = sarvam.translate(body, "en-IN", "ml-IN") or body
+        elif is_mal_script:
+            subject, body = what, what  # AI down: send the Malayalam exactly as written
+        greeting = "നമസ്കാരം,"  # നമസ്കാരം,
     return {"action": "gmail", "to": to, "to_name": "", "subject": subject,
-            "body": f"Hi,\n\n{body}", "say": f"Mail {to}: {subject}"}
+            "body": f"{greeting}\n\n{body}", "say": f"Mail {to}: {subject}"}
 
 
 def plan(goal):
