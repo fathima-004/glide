@@ -16,6 +16,7 @@ def test_quick_whatsapp_syntax():
 
 
 def test_mail_recipient_comes_from_what_was_written():
+    agent.manglish_meaning = lambda text, is_mal_script=False: None  # no network in tests
     agent.handwriting.ask_json = lambda prompt: {"subject": "Work done", "body": "The work is done.\n\nThanks,"}
     p = agent.quick_mail("mail rashrahn work done")
     assert p["to"] == "rashrahn@gmail.com" and p["subject"] == "Work done"

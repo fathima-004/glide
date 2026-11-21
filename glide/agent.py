@@ -75,9 +75,22 @@ MAIL = re.compile(r"^\s*(mail|email|e-mail|m)\s*[-:.–—]?\s*(\S+)\s+(.+)$", r
 MAIL_PROMPT = """Write a short, polite email from these few words: "{what}".
 The words may be English, Malayalam script, or Manglish (Malayalam typed in English letters,
 e.g. "pani kazhinju" = "the work is finished").
+Literal meaning from Sarvam's Malayalam translator: "{meaning}". Trust this for the meaning of
+Malayalam words (who will / won't do what, when), but fix obvious slips such as numbers or times
+using the original words. Keep the email faithful: don't add requests or facts that aren't there.
 Reply with ONLY JSON, writing subject and body in ENGLISH:
 {{"subject": "<3-6 word subject>", "body": "<2-3 sentence email body, no greeting name, end with Thanks,>",
   "language": "ml" if the words were Malayalam script or Manglish, else "en"}}"""
+
+
+def manglish_meaning(text, is_mal_script=False):
+    """Sarvam: Manglish -> Malayalam script -> English, for the literal meaning."""
+    try:
+        ml = text if is_mal_script else sarvam.manglish_to_malayalam(text)
+        return sarvam.translate(ml, "ml-IN", "en-IN") if ml else None
+    except Exception as e:
+        print("meaning failed:", e)
+        return None
 
 
 def quick_mail(goal):
@@ -88,8 +101,9 @@ def quick_mail(goal):
         return None
     who, what = m.group(2).strip().strip(",.:"), m.group(3).strip()
     to = who if "@" in who else who.lower() + "@gmail.com"
-    written = handwriting.ask_json(MAIL_PROMPT.format(what=what)) or {}
     is_mal_script = any("ഀ" <= ch <= "ൿ" for ch in what)
+    meaning = manglish_meaning(what, is_mal_script) or what
+    written = handwriting.ask_json(MAIL_PROMPT.format(what=what, meaning=meaning)) or {}
     subject = written.get("subject") or what[:1].upper() + what[1:]
     body = written.get("body") or what[:1].upper() + what[1:] + ".\n\nThanks,"
     greeting = "Hi,"
