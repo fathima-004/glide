@@ -45,6 +45,7 @@ class Overlay:
         self.root.update_idletasks()
         self._make_click_through()
         self.label, self.label_until, self.label_pos = "", 0.0, (0, 0)
+        self._esc_was_down = False
 
     def _make_click_through(self):
         hwnd = ctypes.windll.user32.GetParent(self.root.winfo_id())
@@ -63,6 +64,27 @@ class Overlay:
                                          outline=color, width=2)
         self.canvas.tag_raise(t, r)
 
+    def _check_escape(self, eng, wr):
+        """Esc stops whatever Glide is doing. Only checked while Glide is busy, and Esc is not
+        swallowed, so it keeps working normally in other apps."""
+        busy = wr.active or eng.teach is not None or eng.state in ("hold", "armed", "drawing",
+                                                                      "drag", "drag_lifted")
+        down = bool(ctypes.windll.user32.GetAsyncKeyState(0x1B) & 0x8000)
+        pressed, self._esc_was_down = down and not self._esc_was_down, down
+        if not (busy and pressed):
+            return
+        was_writer = eng.state == "writer"
+        if wr.active:
+            wr.abort()
+        if eng.teach is not None:
+            eng.cancel_teaching()
+        if eng.state in ("drag", "drag_lifted"):
+            actions.mouse_up()
+        if eng.state in ("hold", "armed", "drawing"):
+            actions.restore_cursor(eng._cursor0)
+        eng.state, eng.stroke = ("writer" if was_writer else "idle"), []  # "writer" waits for the lift
+        eng._say("Cancelled")
+
     def _draw(self):
         cv, eng = self.canvas, self.engine
         cv.delete("all")
@@ -70,6 +92,7 @@ class Overlay:
         cx, cy = actions.get_cursor()
         state = eng.state
         wr = eng.writer
+        self._check_escape(eng, wr)
         wr.tick(now)
         eng.tick(now)
         if eng.ui_request == "teach":

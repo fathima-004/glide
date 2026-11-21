@@ -232,6 +232,12 @@ class Writer:
         self._await_release = True  # the two fingers that opened write mode are still down
         actions_log("write mode")
 
+    def abort(self):
+        """Esc: stop at once. A pending send is cancelled (nothing is sent)."""
+        self._agent_touched = True  # makes any running countdown stop without sending
+        self.word_jobs = []
+        self.cancel("Cancelled")
+
     def cancel(self, msg=None):
         self.mode, self.strokes, self.choices, self.highlight = None, [], [], None
         if msg:

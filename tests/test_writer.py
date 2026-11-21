@@ -229,6 +229,23 @@ def test_whatsapp_word_by_word():
     writer.in_whatsapp_web = lambda: False
 
 
+def test_escape_aborts_a_pending_send():
+    from glide import agent
+    eng, rec = make_engine({})
+    w = eng.writer
+    w.mode, w._agent_touched = "agent", False
+    agent.COUNTDOWN = 1
+    t = time.time()
+
+    def cancelled():
+        if time.time() - t > 0.2 and w.active:
+            w.abort()                         # Esc pressed during the countdown
+        return w._agent_touched
+
+    assert agent._countdown("Sending", lambda s: None, cancelled) is False
+    assert not w.active
+
+
 def test_arabic_options():
     writer.threading.Thread = threading_Thread
     handwriting.ask_json = lambda prompt: {"english": "I will come tomorrow"}
@@ -334,5 +351,7 @@ if __name__ == "__main__":
     print("ok name remembered across sessions")
     test_whatsapp_word_by_word()
     print("ok whatsapp word by word")
+    test_escape_aborts_a_pending_send()
+    print("ok esc aborts")
     test_slant_swipes_pick_the_app()
     print("ok slant swipes")
