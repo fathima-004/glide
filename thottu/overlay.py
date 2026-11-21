@@ -63,8 +63,12 @@ class Overlay:
         now = time.time()
         cx, cy = actions.get_cursor()
         state = eng.state
+        wr = eng.writer
+        wr.tick(now)
 
-        if state == "hold" or (state == "armed" and eng.corner):
+        if wr.active:
+            self._draw_writer(wr, now)
+        elif state == "hold" or (state == "armed" and eng.corner):
             frac = min((now - eng._t0) / HOLD_TIME, 1.0)
             if frac > 0.15:  # don't flash on every normal touch
                 r = 26
@@ -106,6 +110,50 @@ class Overlay:
         if self.label and now < self.label_until:
             x, y = self.label_pos
             self._pill(x, y - 60, self.label, "#ffffff", size=26)
+
+    def _draw_writer(self, wr, now):
+        cv = self.canvas
+        ax, ay = wr.anchor or (self.sw // 2, self.sh // 2)
+        bh = int(self.sh * 0.32)
+        bw = int(bh * (self.engine.aspect or 1.6))
+        x0 = min(max(ax - bw // 2, 20), self.sw - bw - 20)
+        y0 = ay - bh - 70 if ay - bh - 70 > 20 else ay + 50
+        if wr.mode in ("writing", "reading"):
+            cv.create_rectangle(x0, y0, x0 + bw, y0 + bh, fill="#0b1118", outline=CYAN, width=3)
+            title = "✍ WRITE A WORD  (Malayalam or English)" if wr.mode == "writing" \
+                else "Reading…"
+            cv.create_text(x0 + 14, y0 + 12, anchor="nw", text=title, fill=CYAN,
+                           font=("Segoe UI Semibold", 13))
+            a = self.engine.aspect or 1.6
+            for s in list(wr.strokes):
+                pts = [(x0 + px / a * bw, y0 + py * bh) for px, py in list(s)]
+                if len(pts) > 1:
+                    flat = [v for p in pts for v in p]
+                    cv.create_line(*flat, fill="#0f4a52", width=16, capstyle="round",
+                                   joinstyle="round", smooth=True)
+                    cv.create_line(*flat, fill="#ffffff", width=6, capstyle="round",
+                                   joinstyle="round", smooth=True)
+                elif pts:
+                    x, y = pts[0]
+                    cv.create_oval(x - 4, y - 4, x + 4, y + 4, fill="#ffffff", outline="")
+        elif wr.mode == "choosing":
+            n = len(wr.choices)
+            gap = 16
+            cw = min(320, (self.sw - 80) // max(n, 1) - gap)
+            total = n * cw + (n - 1) * gap
+            sx = min(max(ax - total // 2, 20), self.sw - total - 20)
+            cy = ay - 110 if ay > 200 else ay + 90
+            cv.create_text(sx, cy - 62, anchor="w", fill="#8aa0b4", font=("Segoe UI", 12),
+                           text="Hold a finger on the left / middle / right of the touchpad, then lift")
+            for i, (label, text) in enumerate(wr.choices):
+                bx = sx + i * (cw + gap)
+                on = wr.highlight == i
+                cv.create_rectangle(bx, cy - 44, bx + cw, cy + 44, fill="#1d2a12" if on else "#0b1118",
+                                    outline=GOLD if on else "#3a4a5c", width=4 if on else 2)
+                cv.create_text(bx + cw / 2, cy - 22, text=label.upper(), fill="#8aa0b4",
+                               font=("Segoe UI Semibold", 10))
+                cv.create_text(bx + cw / 2, cy + 10, text=text, fill="#ffffff",
+                               font=("Nirmala UI", 22, "bold"), width=cw - 16)
 
     def _tick(self):
         self._draw()

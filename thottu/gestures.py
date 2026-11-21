@@ -27,7 +27,8 @@ HOLD_SLOP = 0.015    # how far (pad fraction) the finger may wander while holdin
 MIN_STROKE = 0.08    # shortest stroke (pad fraction) we try to recognise
 N_POINTS = 64
 MATCH_THRESHOLD = 0.30
-DRAG_GAIN = 1.4      # full pad width moves the cursor 1.4 screen widths
+WRITE_HOLD = 0.5     # two fingers still this long -> write mode
+DRAG_GAIN = 1.4     # full pad width moves the cursor 1.4 screen widths
 
 
 # ---------- templates ----------
@@ -162,6 +163,9 @@ class GestureEngine:
         self._drag_rem = [0.0, 0.0]
         self._label = None
         self._lock = threading.Lock()
+        self._two_t0, self._two_p0, self._two_moved = 0.0, (0.0, 0.0), True
+        from .writer import Writer
+        self.writer = Writer(self._say)
 
     def pop_label(self):
         with self._lock:
@@ -176,6 +180,15 @@ class GestureEngine:
         self.aspect = aspect
         down = [c for c in contacts if c["tip"]]
         now = time.time()
+
+        if self.writer.active:
+            self.writer.feed(down, aspect, now)
+            self.state = "writer"
+            return
+        if self.state == "writer":  # write mode just ended: ignore until fingers lift
+            if not down:
+                self.state = "idle"
+            return
 
         if not down:
             if self.state == "drawing":
@@ -203,7 +216,20 @@ class GestureEngine:
         if len(down) > 1:
             if self.state in ("hold", "armed", "drawing"):
                 actions.restore_cursor(self._cursor0)
-            self.state, self.stroke = "multi", []
+            centre = (sum(c["x"] for c in down) / len(down), sum(c["y"] for c in down) / len(down))
+            if self.state != "multi":
+                if self.state not in ("hold", "armed", "drawing"):
+                    self._cursor0 = actions.get_cursor()
+                self.state, self.stroke = "multi", []
+                self._two_t0, self._two_p0, self._two_moved = now, centre, False
+            elif not self._two_moved:
+                if math.dist(centre, self._two_p0) > HOLD_SLOP:
+                    self._two_moved = True  # scrolling, not write mode
+                elif now - self._two_t0 >= WRITE_HOLD:
+                    self.anchor = self._cursor0
+                    self.writer.start(self._cursor0)
+                    self.state = "writer"
+                    log("two-finger hold -> write mode")
             return
 
         c = down[0]

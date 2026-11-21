@@ -54,6 +54,33 @@ def move_by(dx, dy):
                         min(max(int(round(y + dy)), 0), h - 1))
 
 
+class _KEYBDINPUT(ctypes.Structure):
+    _fields_ = [("wVk", wt.WORD), ("wScan", wt.WORD), ("dwFlags", wt.DWORD),
+                ("time", wt.DWORD), ("dwExtraInfo", ctypes.c_size_t)]
+
+
+class _INPUT(ctypes.Structure):
+    class _U(ctypes.Union):
+        _fields_ = [("ki", _KEYBDINPUT), ("_pad", ctypes.c_byte * 32)]
+    _anonymous_ = ("u",)
+    _fields_ = [("type", wt.DWORD), ("u", _U)]
+
+
+def type_text(text):
+    """Type any Unicode text (Malayalam too) at the cursor."""
+    KEYEVENTF_UNICODE = 0x0004
+    data = text.encode("utf-16-le")
+    units = [int.from_bytes(data[i:i + 2], "little") for i in range(0, len(data), 2)]
+    seq = []
+    for u in units:
+        for flags in (KEYEVENTF_UNICODE, KEYEVENTF_UNICODE | KEYUP):
+            inp = _INPUT(type=1)
+            inp.ki = _KEYBDINPUT(0, u, flags, 0, 0)
+            seq.append(inp)
+    arr = (_INPUT * len(seq))(*seq)
+    user32.SendInput(len(seq), arr, ctypes.sizeof(_INPUT))
+
+
 def right_click():
     user32.mouse_event(0x0008, 0, 0, 0, 0)
     user32.mouse_event(0x0010, 0, 0, 0, 0)

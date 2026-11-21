@@ -39,6 +39,11 @@ Three-finger gestures → Swipes** to **Nothing**.
 | Slide along the **left edge** | Volume |
 | Slide along the **right edge** | Brightness |
 | Slide along the **top edge** | Previous / next tab |
+| Hold **two fingers** still, then write a word | Choose: as written · Malayalam (from Manglish) · translation |
+
+Write mode reads your finger handwriting with **Gemini** and uses **Sarvam AI** for
+Malayalam: Manglish → Malayalam script (`sari` → ശരി) and Malayalam ↔ English translation.
+Set keys once: `setx GEMINI_API_KEY ...` and `setx SARVAM_API_KEY ...`.
 
 Feedback appears right at the mouse cursor, so it's where you're already looking.
 
@@ -50,4 +55,5 @@ Feedback appears right at the mouse cursor, so it's where you're already looking
 - [x] Three-finger drag, no pressing
 - [x] On/off toggle, tray icon, double-click launcher
 - [x] Corner actions + edge sliders (volume, brightness, tabs)
-- [ ] Write Malayalam / English with your finger
+- [x] Write Malayalam / English with your finger, Sarvam conversion, pick from 3 choices
+- [ ] Teach your own shape
