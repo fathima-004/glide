@@ -28,6 +28,21 @@ def manglish_to_malayalam(text):
     return (out or {}).get("transliterated_text")
 
 
+def speak_to_file(text, path):
+    """Sarvam text-to-speech (Malayalam or English) -> WAV file. Returns True on success."""
+    import base64
+    lang = "ml-IN" if any("ഀ" <= ch <= "ൿ" for ch in text) else "en-IN"
+    out = _post("/text-to-speech", {"text": text, "target_language_code": lang})
+    if not out:  # older API shape
+        out = _post("/text-to-speech", {"inputs": [text], "target_language_code": lang})
+    audios = (out or {}).get("audios") or []
+    if not audios:
+        return False
+    with open(path, "wb") as f:
+        f.write(base64.b64decode(audios[0]))
+    return True
+
+
 def translate(text, src, dst):
     """src/dst like 'en-IN', 'ml-IN'."""
     out = _post("/translate", {"input": text, "source_language_code": src,

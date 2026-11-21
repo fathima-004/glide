@@ -29,6 +29,7 @@ def test_write_mode_flow_manglish():
     handwriting.recognise = lambda png: {"text": "sari", "script": "latin", "alternatives": []}
     sarvam.manglish_to_malayalam = lambda t: "ശരി"   # ശരി
     sarvam.translate = lambda t, s, d: "ശരി"          # duplicate -> dropped
+    sarvam.speak_to_file = lambda text, path: False
     writer.threading.Thread = _InlineThread
     writer._type_later = lambda text: actions.type_text(text)  # skip the small delay
 
@@ -45,13 +46,16 @@ def test_write_mode_flow_manglish():
     assert eng.writer.mode == "choosing", eng.writer.mode
     assert [t for _, t in eng.writer.choices] == ["sari", "ശരി"]
 
-    # hold on the right half (2 choices -> right half = choice 2), then lift
-    one(eng, 0.8, 0.5)
-    time.sleep(writer.PICK_HOLD + 0.05)
-    one(eng, 0.8, 0.5)
+    # rest on the right half (2 choices -> right half = choice 2) until the ring fills
+    one(eng, 0.2, 0.5)
+    assert eng.writer.highlight == 0 and typed == []
+    one(eng, 0.8, 0.5)               # slide over: highlight follows, ring restarts
     assert eng.writer.highlight == 1
-    lift(eng)
-    assert typed == ["ശരി"] and not eng.writer.active
+    time.sleep(writer.DWELL + 0.05)
+    one(eng, 0.8, 0.5)
+    assert typed == ["ശരി"] and eng.writer.mode == "picked"
+    eng.writer.tick(time.time() + 1)
+    assert not eng.writer.active
 
 
 class _InlineThread:
