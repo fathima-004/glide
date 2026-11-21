@@ -15,20 +15,14 @@ import webbrowser
 from ctypes import wintypes as wt
 
 from . import actions, handwriting, sarvam
-from .keys import get_key
 
 user32 = ctypes.windll.user32
 
 
 def contacts():
-    """GLIDE_CONTACTS in .env, e.g. GLIDE_CONTACTS=Didi=Didi Ltst; Amma=Amma"""
-    raw = get_key("GLIDE_CONTACTS") or "Didi=Didi Ltst"
-    out = {}
-    for part in raw.split(";"):
-        nick, _, name = part.partition("=")
-        if nick.strip():
-            out[nick.strip()] = (name or nick).strip()
-    return out
+    """Nicknames from the Contacts window (tray menu), saved in %APPDATA%\\Glide\\contacts.json."""
+    from . import contacts as store
+    return store.load()
 
 
 PLAN_PROMPT = """You are the planner inside Glide, a laptop tool for people using one hand.
@@ -36,6 +30,8 @@ The user wrote a short goal with their finger, often in Manglish (Malayalam in E
 or short English. Turn it into ONE action. Reply with ONLY JSON.
 
 Known WhatsApp contacts (nickname -> exact WhatsApp name): {contacts}
+If the person is not in that list, use the name as written, capitalised (e.g. "amma" -> "Amma",
+"rahul" -> "Rahul"); WhatsApp search will find it.
 
 Actions:
 - {{"action": "whatsapp", "contact": "<exact WhatsApp name>", "message_en": "<the message in natural English>", "language": "ml" or "en"}}

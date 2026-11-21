@@ -12,7 +12,8 @@ def open_teach_window(root, engine):
     win.title("Teach Glide a new shape")
     win.configure(bg=BG)
     win.attributes("-topmost", True)
-    w, h = 460, 560
+    k = max(1.0, float(win.tk.call("tk", "scaling")) / (96 / 72))  # follow display scaling
+    w, h = int(500 * k), int(640 * k)
     win.geometry(f"{w}x{h}+{(win.winfo_screenwidth() - w) // 2}+{(win.winfo_screenheight() - h) // 2}")
     win.resizable(False, False)
 
@@ -32,7 +33,8 @@ def open_teach_window(root, engine):
 
     hint = tk.Label(win, text="", bg=BG, fg=MUTED, font=("Segoe UI", 10))
     hint.pack(anchor="w", padx=24)
-    value = tk.Entry(win, bg=CARD, fg=FG, insertbackground=FG, relief="flat", font=("Segoe UI", 12))
+    value = tk.Entry(win, bg=CARD, fg=FG, insertbackground=FG, relief="flat", font=("Segoe UI", 12),
+                     disabledbackground=BG)
     value.pack(fill="x", padx=24, ipady=6)
 
     def _sync():

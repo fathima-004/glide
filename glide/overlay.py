@@ -80,6 +80,10 @@ class Overlay:
             eng.ui_request = None
             from .cheatsheet import show_cheatsheet
             show_cheatsheet()
+        elif eng.ui_request == "contacts":
+            eng.ui_request = None
+            from .contacts_ui import open_contacts_window
+            open_contacts_window(self.root)
         if eng.teach is not None:
             n = len(eng.teach["samples"])
             self._pill(self.sw // 2, 40, f"✨ Teaching “{eng.teach['label']}” — "

@@ -25,6 +25,8 @@ class Tray:
                 pystray.MenuItem("Gesture cheat sheet   (Ctrl+Alt+H)",
                                  lambda: setattr(self.state.engine, "ui_request", "cheatsheet")),
                 pystray.MenuItem("Teach a new shape…   (Ctrl+Alt+N)", self._teach),
+                pystray.MenuItem("Contacts for Glide Agent…",
+                                 lambda: setattr(self.state.engine, "ui_request", "contacts")),
                 pystray.MenuItem("Quit   (Ctrl+Alt+Q)", lambda: os._exit(0)),
             ))
 
