@@ -102,6 +102,22 @@ DO_IT = "⚡ Do it"
 SILENT = ("✉", DO_IT)  # cards that aren't read aloud
 
 
+def in_whatsapp_web():
+    """True when the window in front is WhatsApp Web in Chrome."""
+    try:
+        import ctypes
+        from . import agent
+        user32 = ctypes.windll.user32
+        hwnd = user32.GetForegroundWindow()
+        n = user32.GetWindowTextLengthW(hwnd)
+        buf = ctypes.create_unicode_buffer(n + 1)
+        user32.GetWindowTextW(hwnd, buf, n + 1)
+        return "whatsapp" in buf.value.lower() and agent._exe_of(hwnd) == "chrome.exe"
+    except Exception as e:
+        print("whatsapp check failed:", e)
+        return False
+
+
 def is_direct_command(text):
     """Writing that is clearly an instruction skips the cards: 'w-name msg' or 'mail …'."""
     from .agent import QUICK
@@ -134,6 +150,7 @@ class Writer:
         return self.mode is not None
 
     def start(self, anchor):
+        self.in_whatsapp = in_whatsapp_web()  # the voice-note option only makes sense there
         self.mode, self.strokes, self.choices, self.anchor = "writing", [], [], anchor
         self._last_change, self._touching = time.time(), False
         self._await_release = True  # the two fingers that opened write mode are still down
@@ -378,6 +395,10 @@ class Writer:
             self._run_agent(result["text"])
             return
         typed = build_choices(result)
+        if getattr(self, "in_whatsapp", False):
+            # in WhatsApp Web: offer a Sarvam voice note (Malayalam if there is a Malayalam option)
+            mal = next((t for label, t in typed if label == MAL), None)
+            typed = typed + [(VOICE, mal or result["text"])]
         sends, targets = build_sends(typed, result["text"]) if SEND_ROW_ENABLED else ([], {})
         choices = typed + sends
         actions_log(f"read {result} -> {choices}")

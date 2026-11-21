@@ -113,6 +113,22 @@ def test_language_options():
         [(writer.MAL, "ശരി"), ("English", "Okay")]
 
 
+def test_voice_note_only_in_whatsapp_web():
+    handwriting.recognise = lambda png: {"text": "varaam", "script": "latin", "language": "manglish",
+                                         "alternatives": []}
+    sarvam.manglish_to_malayalam = lambda t: "വരാം"
+    sarvam.translate = lambda t, s, d: "I will come"
+    writer.threading.Thread = _InlineThread
+    for in_wa, expected in ((False, 2), (True, 3)):
+        writer.in_whatsapp_web = lambda: in_wa
+        eng, rec = make_engine({})
+        w = eng.writer
+        w.start((0, 0))
+        w._read([[(0, 0), (1, 1)]])
+        assert len(w.choices) == expected, w.choices
+    assert w.choices[-1] == (writer.VOICE, "വരാം")  # voice note in Malayalam
+
+
 def test_slant_swipes_pick_the_app():
     writer.SEND_ROW_ENABLED = True  # parked feature: still works when switched on
     from glide import contacts
@@ -167,5 +183,7 @@ if __name__ == "__main__":
     print("ok do-it card")
     test_language_options()
     print("ok language options")
+    test_voice_note_only_in_whatsapp_web()
+    print("ok voice only in whatsapp")
     test_slant_swipes_pick_the_app()
     print("ok slant swipes")
