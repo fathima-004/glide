@@ -169,6 +169,15 @@ def test_whatsapp_first_word_is_the_contact():
     assert w.choices[0] == ("English", "Work is finished")
 
 
+def test_arabic_options():
+    writer.threading.Thread = threading_Thread
+    handwriting.ask_json = lambda prompt: {"english": "I will come tomorrow"}
+    assert writer.build_choices({"text": "سأأتي غدا", "language": "arabic"}) == \
+        [(writer.ARA, "سأأتي غدا"), ("English", "I will come tomorrow")]
+    out = handwriting._parse('{"text": "شكرا", "script": "latin", "language": "english"}')
+    assert out["language"] == "arabic" and out["script"] == "arabic"  # script wins over a wrong label
+
+
 def test_gmail_first_word_is_the_address():
     from glide import agent, contacts
     contacts.email_of = lambda nick: ""
@@ -259,5 +268,7 @@ if __name__ == "__main__":
     print("ok first word is the contact")
     test_gmail_first_word_is_the_address()
     print("ok gmail first word is the address")
+    test_arabic_options()
+    print("ok arabic")
     test_slant_swipes_pick_the_app()
     print("ok slant swipes")

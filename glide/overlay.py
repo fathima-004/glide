@@ -247,8 +247,9 @@ class Overlay:
             if i < wr.n_type and text == wr.written:  # what you wrote, read by Gemma
                 from .handwriting import last_model, model_name
                 badge = "· " + model_name(last_model)
-            elif i < wr.n_type:  # converted by Sarvam AI
-                badge = "· Sarvam AI"
+            elif i < wr.n_type:  # converted by Sarvam AI (Arabic: by Gemma, Sarvam has no Arabic)
+                arabic = any("؀" <= ch <= "ۿ" for ch in wr.written)
+                badge = "· Gemma" if arabic else "· Sarvam AI"
             else:
                 badge = ""
             if badge:

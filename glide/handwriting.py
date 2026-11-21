@@ -26,12 +26,12 @@ last_model = None      # which model read the last word (shown on screen)
 
 PROMPT = (
     "This image is handwriting drawn with a finger on a laptop touchpad, so it is shaky. "
-    "It is a short word or phrase in either Malayalam script or English/Latin letters "
+    "It is a short word or phrase in Malayalam script, Arabic script, or English/Latin letters "
     "(Latin letters may be Manglish, i.e. Malayalam typed in English letters). "
     'Reply with ONLY this JSON, nothing else: {"text": "<exact text written>", '
-    '"script": "malayalam" or "latin", '
-    '"language": "malayalam" (Malayalam script) or "english" (English words) or "manglish" '
-    '(Malayalam words in English letters, e.g. "varam", "pani kazhinju"), '
+    '"script": "malayalam" or "arabic" or "latin", '
+    '"language": "malayalam" (Malayalam script) or "arabic" (Arabic script) or "english" '
+    '(English words) or "manglish" (Malayalam words in English letters, e.g. "varam", "pani kazhinju"), '
     '"alternatives": ["<up to 2 other likely readings>"]}'
 )
 
@@ -74,6 +74,8 @@ def _parse(text):
     out["script"] = out.get("script") or "latin"
     if any("ഀ" <= ch <= "ൿ" for ch in out["text"]):
         out["script"], out["language"] = "malayalam", "malayalam"
+    elif any("؀" <= ch <= "ۿ" for ch in out["text"]):
+        out["script"], out["language"] = "arabic", "arabic"
     elif out.get("language") not in ("english", "manglish"):
         out["language"] = "unknown"  # Latin letters, language unclear: offer both
     out["alternatives"] = [str(a).strip() for a in out.get("alternatives", []) if str(a).strip()]

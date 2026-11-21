@@ -29,6 +29,17 @@ SEND_ROW_ENABLED = False  # favourites / voice / do-it row, slant swipes
 DIRECT_COMMANDS = False   # "w-name msg" / "mail ..." act straight away
 
 MAL, ENG = "മലയാളം", "English"  # card labels: മലയാളം, English
+ARA = "العربية"  # العربية
+
+ARABIC_TO_ENGLISH = """Translate this Arabic text to natural English. Keep the meaning exactly,
+add nothing. Text: "{text}"
+Reply with ONLY JSON: {{"english": "<translation>"}}"""
+
+
+def arabic_to_english(text):
+    """Sarvam covers Indian languages only, so Arabic is translated by Gemma (Gemini backup)."""
+    out = handwriting.ask_json(ARABIC_TO_ENGLISH.format(text=text)) or {}
+    return out.get("english")
 
 
 def _parallel(jobs):
@@ -51,13 +62,17 @@ def _parallel(jobs):
 def build_choices(result):
     """Gemma's reading -> the language options, as (label, text).
 
+    Arabic    -> العربية (as written) · English (Gemma translate; Sarvam has no Arabic)
     Malayalam -> മലയാളം (as written) · English (Sarvam translate)
     English   -> English (as written)
     Manglish  -> English (Sarvam: Manglish -> Malayalam -> English) · മലയാളം (Sarvam transliterate)
     Unclear   -> English (as written) · മലയാളം (transliterated)
     """
     text, lang = result["text"], result.get("language", "unknown")
-    if lang == "malayalam":
+    if lang == "arabic":
+        found = _parallel({"en": lambda: arabic_to_english(text)})
+        choices = [(ARA, text), (ENG, found.get("en"))]
+    elif lang == "malayalam":
         found = _parallel({"en": lambda: sarvam.translate(text, "ml-IN", "en-IN")})
         choices = [(MAL, text), (ENG, found.get("en"))]
     elif lang == "english":
@@ -108,7 +123,8 @@ Rules:
 - Do NOT add anything that isn't in the text: no reasons, requests, offers, dates, names,
   apologies or extra sentences.
 - Start the body with a greeting line and end with a closing line, in the same language as
-  the text (English: "Hi," and "Thanks,"; Malayalam: "നമസ്കാരം," and "നന്ദി,").
+  the text (English: "Hi," and "Thanks,"; Malayalam: "നമസ്കാരം," and "നന്ദി,";
+  Arabic: "مرحباً،" and "شكراً،").
 - Subject: a short, natural email subject (2-6 words, same language) that sums up the text.
   Reword it a little so it reads like a real subject line (e.g. "I will not come tomorrow"
   -> "Not coming tomorrow", "work is finished" -> "Work completed", "send the report" ->
