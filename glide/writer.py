@@ -102,6 +102,31 @@ DO_IT = "⚡ Do it"
 SILENT = ("✉", DO_IT)  # cards that aren't read aloud
 
 
+TIDY_PROMPT = """Turn this text into a short email. Text: "{text}"
+Rules:
+- Keep exactly the same meaning and facts. Only fix grammar and make it read as a proper sentence.
+- Do NOT add anything that isn't in the text: no reasons, requests, offers, dates, names,
+  apologies or extra sentences.
+- Start the body with a greeting line and end with a closing line, in the same language as
+  the text (English: "Hi," and "Thanks,"; Malayalam: "നമസ്കാരം," and "നന്ദി,").
+- Subject: 2-6 words taken from the text itself, same language.
+Reply with ONLY JSON: {{"subject": "...", "body": "..."}}"""
+
+
+def tidy_mail(text):
+    """(subject, body): the text tidied into an email without adding any content.
+    Falls back to the text as written if the AI isn't available."""
+    words = text.split()
+    subject = " ".join(words[:6]) + ("…" if len(words) > 6 else "")
+    try:
+        out = handwriting.ask_json(TIDY_PROMPT.format(text=text)) or {}
+        if out.get("body"):
+            return (out.get("subject") or subject).strip(), out["body"].strip()
+    except Exception as e:
+        print("tidy failed:", e)
+    return subject, text
+
+
 def _chrome_tab_in_front(word):
     """True when the window in front is Chrome showing a tab whose title contains word."""
     try:
@@ -290,12 +315,12 @@ class Writer:
         self.say("Pick who — bottom half")
 
     def _mail_text(self, to, text):
-        """Gmail compose to `to` with the chosen text as the content; send after the countdown."""
+        """Gmail compose to `to` with the chosen text, tidied into an email (no new content)."""
         from . import agent
         self._agent_lifted, self._agent_touched = False, False
-        words = text.split()
-        subject = " ".join(words[:6]) + ("…" if len(words) > 6 else "")
-        step = {"action": "gmail", "to": to, "to_name": "", "subject": subject, "body": text}
+        self._agent_status("✉ Tidying the wording…")
+        subject, body = tidy_mail(text)
+        step = {"action": "gmail", "to": to, "to_name": "", "subject": subject, "body": body}
         try:
             result = agent._gmail(step, self._agent_status, lambda: self._agent_touched)
         except Exception as e:

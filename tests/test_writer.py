@@ -179,6 +179,7 @@ def test_gmail_first_word_is_the_address():
     sarvam.translate = lambda t, s, d: "Work is finished"
     mails = []
     agent._gmail = lambda step, status, cancelled: (mails.append(step), "sent")[1]
+    handwriting.ask_json = lambda prompt: {"subject": "Work is finished", "body": "Hi,\n\nThe work is finished.\n\nThanks,"}
     eng, rec = make_engine({})
     w = eng.writer
     handwriting.recognise = lambda png: {"text": "rashrahn", "script": "latin", "language": "english"}
@@ -192,7 +193,9 @@ def test_gmail_first_word_is_the_address():
     w.feed([{"id": 0, "x": 0.1, "y": 0.5, "tip": True}], 1.6, time.time())
     w.feed([{"id": 0, "x": 0.1, "y": 0.5, "tip": True}], 1.6, time.time() + writer.DWELL + 0.1)
     assert mails == [{"action": "gmail", "to": "rashrahn@gmail.com", "to_name": "",
-                      "subject": "Work is finished", "body": "Work is finished"}]
+                      "subject": "Work is finished", "body": "Hi,\n\nThe work is finished.\n\nThanks,"}]
+    handwriting.ask_json = lambda prompt: None  # AI down: the text goes as written
+    assert writer.tidy_mail("work is finished") == ("work is finished", "work is finished")
     writer.in_gmail = lambda: False
 
 
