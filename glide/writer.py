@@ -143,6 +143,9 @@ class Writer:
         self.targets = {}         # bottom-row position -> (kind, target) for favourite people
         self.written = ""
         self.finger_y = None
+        self.in_whatsapp = False
+        self.wa_contact = None    # in WhatsApp: the person named by the first word
+        self.header = ""          # shown above the cards, e.g. "To: Rashid"
         self._swipe = None        # (x, y, time) where the current touch started, for slant swipes
 
     @property
@@ -151,6 +154,7 @@ class Writer:
 
     def start(self, anchor):
         self.in_whatsapp = in_whatsapp_web()  # the voice-note option only makes sense there
+        self.wa_contact, self.header = None, ""
         self.mode, self.strokes, self.choices, self.anchor = "writing", [], [], anchor
         self._last_change, self._touching = time.time(), False
         self._await_release = True  # the two fingers that opened write mode are still down
@@ -231,6 +235,13 @@ class Writer:
                 kind, who = target
                 self.mode, self.agent_status = "agent", f"⚡ {label}…"
                 threading.Thread(target=self._run_send, args=(kind, who, text), daemon=True).start()
+            elif self.wa_contact and label == VOICE:  # WhatsApp: voice note to the named person
+                self.mode, self.agent_status = "agent", f"\U0001F3A4 Voice note for {self.wa_contact}…"
+                threading.Thread(target=self._wa_voice, args=(self.wa_contact, text), daemon=True).start()
+            elif self.wa_contact:                     # WhatsApp: message to the named person
+                self.mode, self.agent_status = "agent", f"⚡ To {self.wa_contact}…"
+                threading.Thread(target=self._run_send, args=("whatsapp", self.wa_contact, text),
+                                 daemon=True).start()
             elif label == VOICE:
                 threading.Thread(target=self._send_voice, args=(idx, text), daemon=True).start()
             elif label == DO_IT:
@@ -261,6 +272,30 @@ class Writer:
         self.choices = self.choices[:self.n_type] + sends
         self.highlight, self._last_change = None, time.time()
         self.say("Pick who — bottom half")
+
+    def _wa_voice(self, contact, text):
+        """Sarvam voice clip (OGG/Opus, WhatsApp's own format) sent to a WhatsApp contact."""
+        import os
+        import tempfile
+        from . import agent
+        self._agent_lifted, self._agent_touched = False, False
+        safe = "".join(ch for ch in text if ch.isalnum() or ch in " _-" or "ഀ" <= ch <= "ൿ")
+        folder = os.path.join(tempfile.gettempdir(), "glide_voice")
+        os.makedirs(folder, exist_ok=True)
+        self._agent_status("\U0001F3A4 Making the voice note (Sarvam)…")
+        try:
+            for codec in ("ogg", "mp3"):
+                path = os.path.join(folder, f"Glide voice - {safe[:30].strip() or 'message'}.{codec}")
+                if sarvam.speak_to_file(text, path, codec=codec):
+                    break
+            else:
+                self.cancel("Voice failed — try again")
+                return
+            result = agent.send_voice_note(contact, path, self._agent_status, lambda: self._agent_touched)
+        except Exception as e:
+            print("voice note failed:", e)
+            result = "Voice failed — try again"
+        self.cancel(result)
 
     def _agent_status(self, text):
         self.agent_status = text
@@ -394,8 +429,20 @@ class Writer:
             self.mode, self.agent_status = "agent", "⚡ " + result["text"]
             self._run_agent(result["text"])
             return
+        if self.in_whatsapp:
+            words = result["text"].split()
+            if len(words) >= 2:
+                # in WhatsApp: first word = who it's for (any WhatsApp contact), the rest = message
+                from . import contacts
+                nick = words[0].strip(",.:-")
+                self.wa_contact = contacts.load().get(nick.lower()) or nick[:1].upper() + nick[1:]
+                self.header = f"To: {self.wa_contact}"
+                result = dict(result, text=" ".join(words[1:]))
+                if result.get("language") == "malayalam" and not any(
+                        "ഀ" <= ch <= "ൿ" for ch in result["text"]):
+                    result["language"] = "unknown"
         typed = build_choices(result)
-        if getattr(self, "in_whatsapp", False):
+        if self.in_whatsapp:
             # in WhatsApp Web: offer a Sarvam voice note (Malayalam if there is a Malayalam option)
             mal = next((t for label, t in typed if label == MAL), None)
             typed = typed + [(VOICE, mal or result["text"])]

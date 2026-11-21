@@ -198,6 +198,8 @@ class Overlay:
                 pos[i] = (sx + k * (cw + gap), y, cw, ch, sizes[r][2])
             y += ch + row_gap
 
+        if wr.header and wr.mode == "choosing":  # e.g. "To: Rashid" when writing in WhatsApp
+            self._pill(ax, top - 30, "\U0001F4AC " + wr.header, "#7cff6b", size=15)
         for i, (label, text) in enumerate(wr.choices):
             bx, by0, cw, ch, fsize = pos[i]
             t = min(max((now - wr.choose_t0 - i * 0.06) / 0.28, 0.0), 1.0)  # cards slide up in turn

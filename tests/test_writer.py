@@ -127,6 +127,33 @@ def test_voice_note_only_in_whatsapp_web():
         w._read([[(0, 0), (1, 1)]])
         assert len(w.choices) == expected, w.choices
     assert w.choices[-1] == (writer.VOICE, "വരാം")  # voice note in Malayalam
+    assert w.wa_contact is None  # one word: no contact, just the message
+
+
+def test_whatsapp_first_word_is_the_contact():
+    from glide import contacts
+    contacts.load = lambda: {"didi": "Didi Ltst"}
+    handwriting.recognise = lambda png: {"text": "rashid pani kazhinju", "script": "latin",
+                                         "language": "manglish", "alternatives": []}
+    sarvam.manglish_to_malayalam = lambda t: {"pani kazhinju": "പണി കഴിഞ്ഞു"}.get(t)
+    sarvam.translate = lambda t, s, d: "Work is finished"
+    writer.threading.Thread = _InlineThread
+    writer.in_whatsapp_web = lambda: True
+    eng, rec = make_engine({})
+    w = eng.writer
+    w.start((0, 0))
+    w._read([[(0, 0), (1, 1)]])
+    assert w.wa_contact == "Rashid" and w.header == "To: Rashid"
+    assert w.choices[0] == ("English", "Work is finished")
+    sent = []
+    w._run_send = lambda kind, who, text: sent.append((kind, who, text))
+    w.feed([{"id": 0, "x": 0.1, "y": 0.5, "tip": True}], 1.6, time.time())
+    w.feed([{"id": 0, "x": 0.1, "y": 0.5, "tip": True}], 1.6, time.time() + writer.DWELL + 0.1)
+    assert sent == [("whatsapp", "Rashid", "Work is finished")]
+    handwriting.recognise = lambda png: {"text": "didi varaam", "script": "latin", "language": "manglish"}
+    w.start((0, 0))
+    w._read([[(0, 0), (1, 1)]])
+    assert w.wa_contact == "Didi Ltst"  # favourite nickname
 
 
 def test_slant_swipes_pick_the_app():
@@ -185,5 +212,7 @@ if __name__ == "__main__":
     print("ok language options")
     test_voice_note_only_in_whatsapp_web()
     print("ok voice only in whatsapp")
+    test_whatsapp_first_word_is_the_contact()
+    print("ok first word is the contact")
     test_slant_swipes_pick_the_app()
     print("ok slant swipes")

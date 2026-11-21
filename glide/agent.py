@@ -261,25 +261,51 @@ def _whatsapp(step, status, cancelled):
     if step.get("language") == "ml" and msg and "message" not in step:
         status("⚡ Writing it in Malayalam (Sarvam)…")
         msg = sarvam.translate(msg, "en-IN", "ml-IN") or msg
-    status("⚡ Opening WhatsApp in Chrome…")
-    if not focus_whatsapp_in_chrome(status):
-        return "Couldn't open WhatsApp Web in Chrome"
-    status(f"⚡ Finding {contact}…")
-    actions.press("esc")
-    time.sleep(0.2)
-    actions.press("ctrl", "alt", "slash")  # WhatsApp Web: search chats
-    time.sleep(0.6)
-    actions.press("ctrl", "a")
-    actions.type_text(contact)
-    time.sleep(1.2)
-    actions.press("enter")                 # open the top match
-    time.sleep(1.0)
+    err = open_chat(contact, status)
+    if err:
+        return err
     status(f"⚡ Typing to {contact}…")
     actions.type_text(msg)
     if not _countdown(f"Sending to {contact}", status, cancelled):
         return "Not sent — the message is waiting in the chat"
     actions.press("enter")
     return f"✓ Sent to {contact}: “{msg}”"
+
+
+def open_chat(contact, status):
+    """WhatsApp Web in Chrome -> search any contact by name -> open their chat. None if OK."""
+    status("⚡ Opening WhatsApp in Chrome…")
+    if not focus_whatsapp_in_chrome(status):
+        return "Couldn't open WhatsApp Web in Chrome"
+    status(f"⚡ Finding {contact}…")
+    actions.press("esc")
+    time.sleep(0.2)
+    actions.press("ctrl", "alt", "slash")  # WhatsApp Web: search chats and contacts
+    time.sleep(0.6)
+    actions.press("ctrl", "a")
+    actions.type_text(contact)
+    time.sleep(1.5)                        # let WhatsApp list the matches
+    actions.press("enter")                 # open the top match
+    time.sleep(1.0)
+    return None
+
+
+def send_voice_note(contact, path, status, cancelled):
+    """Open the contact's chat, paste the voice-note file, and send it after the countdown."""
+    import subprocess
+    err = open_chat(contact, status)
+    if err:
+        return err
+    status(f"⚡ Attaching voice note for {contact}…")
+    subprocess.run(["powershell", "-NoProfile", "-Command", f"Set-Clipboard -LiteralPath '{path}'"],
+                   creationflags=0x08000000, timeout=10)
+    time.sleep(0.2)
+    actions.press("ctrl", "v")
+    time.sleep(1.8)                        # WhatsApp shows the attachment preview
+    if not _countdown(f"Sending voice note to {contact}", status, cancelled):
+        return "Not sent — the voice note is waiting in the chat"
+    actions.press("enter")
+    return f"✓ Voice note sent to {contact}"
 
 
 def _wait_for_chrome_title(word, seconds=12):
