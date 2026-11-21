@@ -5,6 +5,7 @@ import queue
 import sys
 import time
 
+from .gestures import GestureEngine
 from .touchpad import TouchpadReader
 
 
@@ -16,9 +17,14 @@ def main():
 
     debug = "--debug" in sys.argv
     frames = queue.Queue()
+    engine = GestureEngine()
 
     def on_frame(contacts, aspect):
+        engine.feed(contacts, aspect)
         if debug:
+            lbl = engine.pop_label()
+            if lbl:
+                print(">>> GESTURE:", lbl, flush=True)
             print(" | ".join(f"id{c['id']} {'DOWN' if c['tip'] else 'up  '} "
                              f"x={c['x']:.3f} y={c['y']:.3f}" for c in contacts), flush=True)
         else:
@@ -39,7 +45,7 @@ def main():
             return
 
     from .overlay import Overlay
-    Overlay(frames).run()
+    Overlay(frames, engine).run()
 
 
 if __name__ == "__main__":

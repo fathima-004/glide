@@ -24,7 +24,8 @@ Press **Ctrl + Alt + Q** to quit.
 
 - [x] Read raw multi-finger contacts (Win32 Raw Input + hid.dll)
 - [x] Glowing on-screen trail so an audience can see the touchpad
-- [ ] Draw-to-shortcut (C copy, V paste, circle screenshot…)
+- [x] Draw-to-shortcut: hold a finger still, then draw
+      C copy · V paste · Z undo · ✓ enter · ○ screenshot
 - [ ] Three-finger drag, no pressing
 - [ ] Corner taps + edge sliders
 - [ ] Write Malayalam / English with your finger

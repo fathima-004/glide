@@ -26,9 +26,9 @@ def _dim(hex_color, f):
 
 
 class Overlay:
-    def __init__(self, frames: "queue.Queue", on_tick=None):
+    def __init__(self, frames: "queue.Queue", engine=None):
         self.frames = frames
-        self.on_tick = on_tick
+        self.engine = engine
         self.root = tk.Tk()
         self.root.overrideredirect(True)
         self.root.attributes("-topmost", True)
@@ -92,12 +92,25 @@ class Overlay:
         cv.delete("all")
         now = time.time()
         visible = (now - self.last_touch) < FADE_AFTER or self.trails
+        state = self.engine.state if self.engine else "idle"
+        drawing = state in ("armed", "drawing")
         if visible:
             x0, y0, x1, y1 = self._pad_rect()
-            cv.create_rectangle(x0, y0, x1, y1, outline="#3a4a5c", width=2, fill="#0b1118")
-            cv.create_text(x0 + 12, y0 + 12, anchor="nw", text="THOTTU", fill="#56708a",
-                           font=("Segoe UI Semibold", 11))
+            cv.create_rectangle(x0, y0, x1, y1, outline="#ffd23f" if drawing else "#3a4a5c",
+                                width=3 if drawing else 2, fill="#0b1118")
+            cv.create_text(x0 + 12, y0 + 12, anchor="nw",
+                           text="DRAW A SHORTCUT" if drawing else "THOTTU",
+                           fill="#ffd23f" if drawing else "#56708a", font=("Segoe UI Semibold", 11))
             w, h = x1 - x0, y1 - y0
+            if drawing:
+                stroke = list(self.engine.stroke)
+                if len(stroke) > 1:
+                    a = self.engine.aspect or 1.6
+                    flat = [v for px, py in stroke for v in (x0 + px / a * w, y0 + py * h)]
+                    cv.create_line(*flat, fill="#5c4a10", width=22, capstyle="round",
+                                   joinstyle="round", smooth=True)
+                    cv.create_line(*flat, fill="#ffd23f", width=7, capstyle="round",
+                                   joinstyle="round", smooth=True)
             for i, (cid, pts) in enumerate(sorted(self.trails.items())):
                 col = FINGER_COLORS[i % len(FINGER_COLORS)]
                 xy = [(x0 + px * w, y0 + py * h) for px, py in pts]
@@ -119,8 +132,10 @@ class Overlay:
 
     def _tick(self):
         self._drain()
-        if self.on_tick:
-            self.on_tick(self)
+        if self.engine:
+            lbl = self.engine.pop_label()
+            if lbl:
+                self.show_label(lbl)
         self._draw()
         self.root.after(16, self._tick)
 
