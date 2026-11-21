@@ -1,23 +1,37 @@
-"""Find API keys in the environment, or in the user's saved variables (setx) even if
-this process started before they were set."""
+"""Find API keys: environment, a .env file, or the user's saved variables (setx).
+
+.env is looked for, in order:
+  1. next to Glide.exe (when running the downloaded .exe)
+  2. the project folder (when running from source)
+  3. %APPDATA%\\Glide\\.env
+Keys are never built into the .exe.
+"""
 import os
+import sys
 
 
-ENV_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
+def env_files():
+    paths = []
+    if getattr(sys, "frozen", False):  # running as Glide.exe
+        paths.append(os.path.join(os.path.dirname(sys.executable), ".env"))
+    paths.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"))
+    paths.append(os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), "Glide", ".env"))
+    return paths
 
 
 def _from_file(name):
-    """Read NAME=value from the project's .env file (git-ignored)."""
-    try:
-        with open(ENV_FILE, encoding="utf-8-sig") as f:
-            for line in f:
-                k, sep, v = line.partition("=")
-                if sep and k.strip() == name:
-                    v = v.strip().strip('"').strip("'")
-                    if v and not v.startswith("paste"):
-                        return v
-    except OSError:
-        pass
+    """Read NAME=value from the first .env file that has it (git-ignored)."""
+    for path in env_files():
+        try:
+            with open(path, encoding="utf-8-sig") as f:
+                for line in f:
+                    k, sep, v = line.partition("=")
+                    if sep and k.strip() == name:
+                        v = v.strip().strip('"').strip("'")
+                        if v and not v.startswith("paste"):
+                            return v
+        except OSError:
+            pass
     return None
 
 

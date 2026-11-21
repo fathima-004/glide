@@ -9,9 +9,22 @@ turns it into one-finger gestures, with no new hardware.
 
 Built at **HackaThoni 2026** (Alappuzha) · Track 03: Beyond the Screen (gesture / sensor control).
 
-## Run
+## Download (no Python needed)
 
-Windows 10/11 with a precision touchpad, Python 3.10+.
+1. Download **Glide.exe** from the [latest release](https://github.com/fathima-004/glide/releases/latest).
+2. Put a file named `.env` in the same folder, with your keys (only needed for write mode):
+   ```
+   GEMINI_API_KEY=...
+   SARVAM_API_KEY=...
+   ```
+3. Double-click **Glide.exe**. Windows may say "Windows protected your PC" because the app isn't
+   signed: click **More info → Run anyway**.
+
+Needs Windows 10/11 and a precision touchpad (almost every laptop from the last few years).
+
+## Run from source
+
+Python 3.10+. Build the .exe yourself with `python build_exe.py`.
 
 ```
 pip install -r requirements.txt   # tray icon (once)
