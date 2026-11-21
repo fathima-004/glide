@@ -136,20 +136,25 @@ class Writer:
                 threading.Thread(target=_type_later, args=(text,), daemon=True).start()
 
     def _send_voice(self, idx, text):
-        """Make a Sarvam voice clip and paste it as a file (WhatsApp shows it, ✓ sends)."""
+        """Make a Sarvam voice clip and paste it as a file (WhatsApp shows it, ✓ sends).
+
+        OGG/Opus is WhatsApp's own voice-note format, so it plays inline in the chat on
+        phones and desktop; MP3 is the fallback. (WAV would arrive as a document.)
+        """
         import os
-        import shutil
         import subprocess
         import tempfile
-        safe = "".join(ch for ch in text if ch.isalnum() or ch in " _-")[:30].strip() or "message"
+        safe = "".join(ch for ch in text if ch.isalnum() or ch in " _-" or "ഀ" <= ch <= "ൿ")
+        safe = safe[:30].strip() or "message"
         folder = os.path.join(tempfile.gettempdir(), "glide_voice")
         os.makedirs(folder, exist_ok=True)
-        path = os.path.join(folder, f"Glide voice - {safe}.wav")
-        src = self.audio.get(idx)
+        self.say("\U0001F3A4 Making voice note…")
         try:
-            if src and os.path.exists(src):
-                shutil.copyfile(src, path)
-            elif not sarvam.speak_to_file(text, path):
+            for codec in ("ogg", "mp3"):
+                path = os.path.join(folder, f"Glide voice - {safe}.{codec}")
+                if sarvam.speak_to_file(text, path, codec=codec):
+                    break
+            else:
                 self.say("Voice failed")
                 return
             subprocess.run(["powershell", "-NoProfile", "-Command",

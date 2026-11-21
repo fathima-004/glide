@@ -28,12 +28,19 @@ def manglish_to_malayalam(text):
     return (out or {}).get("transliterated_text")
 
 
-def speak_to_file(text, path):
-    """Sarvam text-to-speech (Malayalam or English) -> WAV file. Returns True on success."""
+CODECS = {
+    "wav": {},  # default; instant playback with winsound
+    "ogg": {"output_audio_codec": "opus", "speech_sample_rate": 24000},  # WhatsApp's voice-note format
+    "mp3": {"output_audio_codec": "mp3"},
+}
+
+
+def speak_to_file(text, path, codec="wav"):
+    """Sarvam Bulbul text-to-speech (Malayalam or English) -> audio file. True on success."""
     import base64
     lang = "ml-IN" if any("ഀ" <= ch <= "ൿ" for ch in text) else "en-IN"
-    out = _post("/text-to-speech", {"text": text, "target_language_code": lang})
-    if not out:  # older API shape
+    out = _post("/text-to-speech", {"text": text, "target_language_code": lang, **CODECS[codec]})
+    if not out and codec == "wav":  # older API shape
         out = _post("/text-to-speech", {"inputs": [text], "target_language_code": lang})
     audios = (out or {}).get("audios") or []
     if not audios:
