@@ -170,20 +170,26 @@ class Overlay:
             if wr.mode == "reading":
                 title = "Reading with Gemma…"
             elif words:  # WhatsApp/Gmail: show what has been read so far
-                who = wr.wa_contact or wr.mail_to
-                if who:
-                    title = f"To: {who}  ·  {' '.join(words)}"
+                who, msg, new = wr.preview()
+                last = wr.last_wa_contact if wr.in_whatsapp else wr.last_mail_to
+                if new:
+                    title = f"To: {who} (new)  ·  {msg or '…'}"
                 else:
-                    title = f"To: {words[0]}  ·  {' '.join(words[1:]) or '…'}"
+                    title = f"To: {who or last} (continuing)  ·  {msg or '…'}"
                 title = "✍ " + title + "      (stop for 2 s when done)"
             elif wr.wa_contact:
                 title = f"✍ Now write the message for {wr.wa_contact}"
+            elif wr.in_whatsapp and wr.last_wa_contact:
+                title = (f"✍ Message for {wr.last_wa_contact} — or  Name,  then the message"
+                         " for someone new")
             elif wr.in_whatsapp:
-                title = "✍ Write the name, then the message — one word at a time"
+                title = "✍ Name,  then the message — one word at a time"
             elif wr.mail_to:
                 title = f"✍ Now write the mail for {wr.mail_to}"
+            elif wr.in_gmail and wr.last_mail_to:
+                title = f"✍ Mail for {wr.last_mail_to} — or  name,  then the mail for someone new"
             elif wr.in_gmail:
-                title = "✍ Write the email name, then the mail — one word at a time"
+                title = "✍ Email name,  then the mail — one word at a time"
             else:
                 title = "✍ Write a word"
             col = "#7cff6b" if wr.wa_contact else "#ff6fd8" if wr.mail_to else CYAN

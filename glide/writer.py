@@ -151,6 +151,19 @@ def tidy_mail(text):
     return subject, text
 
 
+def split_recipient(text, last):
+    """(who, message, is_new). 'Baba, varaam' -> new person Baba. Without a comma the whole text is
+    the message for `last`; if there is no last person yet, the first word is the person."""
+    import re
+    m = re.match(r"^\s*([^,\u060c\s]+)\s*[,\u060c]\s*(.*)$", text, re.S)  # also the Arabic comma
+    if m:
+        return m.group(1), m.group(2).strip(), True
+    if last:
+        return None, text.strip(), False
+    words = text.split()
+    return (words[0] if words else ""), " ".join(words[1:]), True
+
+
 def _chrome_tab_in_front(word):
     """True when the window in front is Chrome showing a tab whose title contains word."""
     try:
@@ -209,6 +222,8 @@ class Writer:
         self.mail_to = None       # in Gmail: the address made from the first word
         self._pending = None      # (kind, who, time): a name written whose message hasn't been sent
         self.word_jobs = []       # WhatsApp/Gmail: words read one by one while writing
+        self.last_wa_contact = None  # who the last WhatsApp message went to (no comma = continue)
+        self.last_mail_to = None     # same for Gmail
         self.header = ""          # shown above the cards, e.g. "To: Rashid"
         self._swipe = None        # (x, y, time) where the current touch started, for slant swipes
 
@@ -560,6 +575,13 @@ class Writer:
         """In WhatsApp/Gmail you write several words on the same small pad: read them one by one."""
         return self.in_whatsapp or self.in_gmail
 
+    def preview(self):
+        """(who, message, is_new) for the words read so far, for the on-screen hint."""
+        text = " ".join(self.words_so_far).replace(" ,", ",")
+        if self.wa_contact or self.mail_to:
+            return self.wa_contact or self.mail_to, text, False
+        return split_recipient(text, self.last_wa_contact if self.in_whatsapp else self.last_mail_to)
+
     @property
     def words_so_far(self):
         return [j["text"] or "\u2026" for j in self.word_jobs]
@@ -581,8 +603,10 @@ class Writer:
         if not words:
             self.cancel("Couldn't read that \u2014 try bigger")
             return
-        text = " ".join(j["text"] for j in words)
-        msg_langs = [j["language"] for j in (words if (self.wa_contact or self.mail_to) else words[1:])]
+        text = " ".join(j["text"] for j in words).replace(" ,", ",").replace(" \u060c", "\u060c")
+        last = self.last_wa_contact if self.in_whatsapp else self.last_mail_to
+        new = not (self.wa_contact or self.mail_to) and split_recipient(text, last)[2]
+        msg_langs = [j["language"] for j in (words[1:] if new else words) if j["text"] not in (",", "\u060c")]
         if any("\u0600" <= ch <= "\u06ff" for ch in text):
             lang = "arabic"
         elif "manglish" in msg_langs:
@@ -601,43 +625,48 @@ class Writer:
             self._run_agent(result["text"])
             return
         if self.in_whatsapp and not self.wa_contact:
-            # in WhatsApp: the first word names the person (any WhatsApp contact). Open their chat
-            # right away; the rest (written now or after a pause) is the message.
+            # in WhatsApp: "Baba, message" = new person; "message" = continue with the last person
             from . import agent, contacts
-            words = result["text"].split()
-            nick = words[0].strip(",.:-")
-            self.wa_contact = contacts.load().get(nick.lower()) or nick[:1].upper() + nick[1:]
-            self.header = f"To: {self.wa_contact}"
+            nick, msg, new = split_recipient(result["text"], self.last_wa_contact)
+            if new:
+                nick = nick.strip(",.:-")
+                self.wa_contact = contacts.load().get(nick.lower()) or nick[:1].upper() + nick[1:]
+            else:
+                self.wa_contact = self.last_wa_contact
+            self.header = f"To: {self.wa_contact}" + ("" if new else "  (continuing)")
             self.mode = "agent"
             err = agent.open_chat(self.wa_contact, self._agent_status)
             if err:
                 self.cancel(err)
                 return
             self.chat_open = True
-            self._pending = ("whatsapp", self.wa_contact, time.time())
-            if len(words) < 2:  # only the name so far: now write the message
+            self.last_wa_contact = self.wa_contact
+            if not msg:  # only the name so far: now write the message
                 self.mode, self.strokes, self._touching = "writing", [], False
                 self._await_release, self._last_change = False, time.time()
                 return
-            result = dict(result, text=" ".join(words[1:]))
+            result = dict(result, text=msg)
             if result.get("language") == "malayalam" and not any(
-                    "ഀ" <= ch <= "ൿ" for ch in result["text"]):
+                    "\u0d00" <= ch <= "\u0d7f" for ch in result["text"]):
                 result["language"] = "unknown"
         if self.in_gmail and not self.mail_to:
-            # in Gmail: the first word is the address (word -> word@gmail.com), the rest is the mail
+            # in Gmail: "rashrahn, message" = new address (word -> word@gmail.com); no comma = same person
             from . import contacts
-            words = result["text"].split()
-            who = words[0].strip(",.:-")
-            self.mail_to = who if "@" in who else (contacts.email_of(who) or who.lower() + "@gmail.com")
-            self.header = f"To: {self.mail_to}"
-            self._pending = ("mail", self.mail_to, time.time())
-            if len(words) < 2:  # only the address so far: now write the mail
+            who, msg, new = split_recipient(result["text"], self.last_mail_to)
+            if new:
+                who = who.strip(",.:-")
+                self.mail_to = who if "@" in who else (contacts.email_of(who) or who.lower() + "@gmail.com")
+            else:
+                self.mail_to = self.last_mail_to
+            self.header = f"To: {self.mail_to}" + ("" if new else "  (continuing)")
+            self.last_mail_to = self.mail_to
+            if not msg:  # only the address so far: now write the mail
                 self.mode, self.strokes, self._touching = "writing", [], False
                 self._await_release, self._last_change = False, time.time()
                 return
-            result = dict(result, text=" ".join(words[1:]))
+            result = dict(result, text=msg)
             if result.get("language") == "malayalam" and not any(
-                    "ഀ" <= ch <= "ൿ" for ch in result["text"]):
+                    "\u0d00" <= ch <= "\u0d7f" for ch in result["text"]):
                 result["language"] = "unknown"
         typed = build_choices(result)
         if self.in_whatsapp:

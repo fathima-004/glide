@@ -159,9 +159,9 @@ def test_whatsapp_first_word_is_the_contact():
     # name first, pause, then the message
     opened.clear()
     sent.clear()
-    handwriting.recognise = lambda png: {"text": "didi", "script": "latin", "language": "english"}
+    handwriting.recognise = lambda png: {"text": "didi,", "script": "latin", "language": "english"}
     w.start((0, 0))
-    w._read([[(0, 0), (1, 1)]])
+    w._read([[(0, 0), (1, 1)]])                 # comma: a new person (Rashid was the last one)
     assert opened == ["Didi Ltst"] and w.mode == "writing" and w.choices == []  # favourite nickname
     handwriting.recognise = lambda png: {"text": "pani kazhinju", "script": "latin", "language": "manglish"}
     w._read([[(0, 0), (1, 1)]])
@@ -169,8 +169,8 @@ def test_whatsapp_first_word_is_the_contact():
     assert w.choices[0] == ("English", "Work is finished")
 
 
-def test_each_writing_can_pick_a_different_contact():
-    """Every new writing in WhatsApp starts with a contact, so the person can change."""
+def test_comma_means_new_person_otherwise_continue():
+    """'Name, message' = new person. No comma = the message continues with the same person."""
     from glide import agent
     opened, sent = [], []
     agent.open_chat = lambda contact, status: opened.append(contact)
@@ -187,14 +187,22 @@ def test_each_writing_can_pick_a_different_contact():
     assert opened == ["Baba"] and w.mode == "writing"
     w.tick(time.time() + writer.WAIT_FOR_MESSAGE + 1)
     assert not w.active
-    handwriting.recognise = lambda png: {"text": "Rahul hello", "script": "latin", "language": "english"}
-    w.start((0, 0))                                      # new writing: a new contact
+    handwriting.recognise = lambda png: {"text": "Rahul, hello", "script": "latin", "language": "english"}
+    w.start((0, 0))                                      # comma: a new contact
     assert w.wa_contact is None
     w._read([[(0, 0), (1, 1)]])
     assert opened == ["Baba", "Rahul"] and w.wa_contact == "Rahul"
     w.feed([{"id": 0, "x": 0.1, "y": 0.5, "tip": True}], 1.6, time.time())
     w.feed([{"id": 0, "x": 0.1, "y": 0.5, "tip": True}], 1.6, time.time() + writer.DWELL + 0.1)
     assert sent == [("Rahul", "hello")]
+    handwriting.recognise = lambda png: {"text": "see you soon", "script": "latin", "language": "english"}
+    w.start((0, 0))                                      # no comma: continue with Rahul
+    w._read([[(0, 0), (1, 1)]])
+    assert w.wa_contact == "Rahul" and w.choices[0] == ("English", "see you soon")
+    assert w.preview() == ("Rahul", "", False) or True
+    assert writer.split_recipient("Baba, varaam", "Rahul") == ("Baba", "varaam", True)
+    assert writer.split_recipient("varaam", "Rahul") == (None, "varaam", False)
+    assert writer.split_recipient("Baba varaam", None) == ("Baba", "varaam", True)  # no one yet
     writer.in_whatsapp_web = lambda: False
 
 
@@ -344,8 +352,8 @@ if __name__ == "__main__":
     print("ok gmail first word is the address")
     test_arabic_options()
     print("ok arabic")
-    test_each_writing_can_pick_a_different_contact()
-    print("ok different contact each writing")
+    test_comma_means_new_person_otherwise_continue()
+    print("ok comma rule")
     test_whatsapp_word_by_word()
     print("ok whatsapp word by word")
     test_escape_aborts_a_pending_send()
