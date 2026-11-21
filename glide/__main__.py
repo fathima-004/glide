@@ -75,6 +75,9 @@ def main():
     except Exception as e:  # tray is a nicety; keep running without it
         print("tray unavailable:", e)
 
+    from . import handwriting
+    handwriting.start_health_checks()  # know if Gemma is up before anyone writes
+
     from .overlay import Overlay
     engine._say("Glide ON")
     Overlay(engine).run()

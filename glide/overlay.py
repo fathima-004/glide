@@ -138,7 +138,7 @@ class Overlay:
         y0 = ay - bh - 70 if ay - bh - 70 > 20 else ay + 50
         if wr.mode in ("writing", "reading"):
             # no board: the ink is written straight over the screen, with a small hint above it
-            title = "✍ Write a word" if wr.mode == "writing" else "Reading with Gemini…"
+            title = "✍ Write a word" if wr.mode == "writing" else "Reading with Gemma…"
             self._pill(x0 + bw / 2, y0 - 6, title, CYAN, size=12)
             a = self.engine.aspect or 1.6
             for s in list(wr.strokes):
@@ -207,8 +207,15 @@ class Overlay:
             # tag
             tag = cv.create_text(bx + 18, by + 20, anchor="w", text=label, fill=col,
                                  font=("Nirmala UI", 12, "bold"))
-            if label not in ("As written", "Or"):  # these cards come from Sarvam AI
-                cv.create_text(cv.bbox(tag)[2] + 8, by + 21, anchor="w", text="· Sarvam AI",
+            if label == "As written":  # read by Gemma (or the Gemini safety net)
+                from .handwriting import last_model, model_name
+                badge = "· " + model_name(last_model)
+            elif label != "Or":        # these cards come from Sarvam AI
+                badge = "· Sarvam AI"
+            else:
+                badge = ""
+            if badge:
+                cv.create_text(cv.bbox(tag)[2] + 8, by + 21, anchor="w", text=badge,
                                fill="#8aa0b4", font=("Segoe UI", 9))
             # the word
             cv.create_text(bx + cw / 2, by + ch / 2 + 10, text=text, fill="#ffffff",

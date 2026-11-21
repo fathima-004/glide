@@ -25,7 +25,7 @@ EN = "Segoe UI"     # English text
 ML = "Nirmala UI"   # Malayalam text
 
 WIDTH, HEIGHT = 960, 650   # logical size at 100 % display scaling
-CREDITS = "Malayalam by Sarvam AI  ·  handwriting read by Google Gemini  ·  this cheat sheet was built by Devin"
+CREDITS = "Malayalam by Sarvam AI  ·  handwriting read by Google Gemma  ·  this cheat sheet was built by Devin"
 TIMEOUT_MS = 25_000        # auto-close delay
 TICK_MS = 50               # countdown bar refresh
 

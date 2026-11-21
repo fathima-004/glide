@@ -1,24 +1,35 @@
-"""Finger handwriting -> text, using Gemini to read an image of the strokes.
+"""Finger handwriting -> text, read by Google's open Gemma model from an image of the strokes.
+
+Gemma 4 is tried first. If it's overloaded or slow, Gemini Flash-Lite takes over so the
+user is never left waiting, and Gemma is skipped for a couple of minutes before retrying.
 
     python -m glide.handwriting demo.json   # strokes from JSON, prints the result
 """
 import base64
 import io
 import json
+import re
 import sys
+import time
 
 import requests
 from PIL import Image, ImageDraw
 
 from .keys import get_key
 
-MODELS = ["gemini-flash-lite-latest", "gemini-3.5-flash-lite"]  # fast ones; tested on 21 Nov 2026
+# (model, timeout seconds). Gemma first; Gemini Flash-Lite is the fast safety net.
+GEMMA = [("gemma-4-26b-a4b-it", 6), ("gemma-4-31b-it", 6)]
+FALLBACK = [("gemini-flash-lite-latest", 10), ("gemini-3.5-flash-lite", 10)]
+GEMMA_COOLDOWN = 120  # seconds to skip Gemma after it fails
+_gemma_down_until = 0.0
+last_model = None      # which model read the last word (shown on screen)
+
 PROMPT = (
     "This image is handwriting drawn with a finger on a laptop touchpad, so it is shaky. "
     "It is a short word or phrase in either Malayalam script or English/Latin letters "
     "(Latin letters may be Manglish, i.e. Malayalam typed in English letters). "
-    'Reply as JSON: {"text": "<exact text written>", "script": "malayalam" or "latin", '
-    '"alternatives": ["<up to 2 other likely readings>"]}'
+    'Reply with ONLY this JSON, nothing else: {"text": "<exact text written>", '
+    '"script": "malayalam" or "latin", "alternatives": ["<up to 2 other likely readings>"]}'
 )
 
 
@@ -52,45 +63,92 @@ def strokes_to_png(strokes, height=320, pad=28, width_px=8):
     return buf.getvalue()
 
 
-def recognise(png_bytes, timeout=10):
-    """Returns {"text", "script", "alternatives"} or None on failure."""
+def _parse(text):
+    """Pull the JSON object out of a reply (Gemma may wrap it in ```json fences)."""
+    m = re.search(r"\{.*\}", text, re.S)
+    out = json.loads(m.group(0) if m else text)
+    out["text"] = str(out.get("text", "")).strip().strip('"')
+    out["script"] = out.get("script") or "latin"
+    out["alternatives"] = [str(a).strip() for a in out.get("alternatives", []) if str(a).strip()]
+    return out if out["text"] else None
+
+
+def _ask(model, timeout, key, png_bytes):
+    gen = {"temperature": 0, "thinkingConfig": {"thinkingLevel": "minimal"}}
+    if model.startswith("gemini"):
+        gen["responseMimeType"] = "application/json"
+    body = {"contents": [{"parts": [
+        {"text": PROMPT},
+        {"inline_data": {"mime_type": "image/png", "data": base64.b64encode(png_bytes).decode()}},
+    ]}], "generationConfig": gen}
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+    # key in a header, never in the URL, so it can't leak into logs or error messages
+    r = requests.post(url, headers={"x-goog-api-key": key}, json=body, timeout=timeout)
+    if r.status_code == 400 and "hinking" in r.text:
+        gen.pop("thinkingConfig")
+        r = requests.post(url, headers={"x-goog-api-key": key}, json=body, timeout=timeout)
+    if not r.ok:
+        raise RuntimeError(f"HTTP {r.status_code}")
+    parts = r.json()["candidates"][0]["content"]["parts"]
+    answer = [p["text"] for p in parts if "text" in p and not p.get("thought")]
+    return _parse(answer[-1])
+
+
+def recognise(png_bytes):
+    """Returns {"text", "script", "alternatives", "model"} or None on failure."""
+    global _gemma_down_until, last_model
     key = get_key("GEMINI_API_KEY")
     if not key:
         print("handwriting: GEMINI_API_KEY not set")
         return None
-    models = [m for m in [get_key("GEMINI_MODEL")] if m] + MODELS
-    body = {
-        "contents": [{"parts": [
-            {"text": PROMPT},
-            {"inline_data": {"mime_type": "image/png", "data": base64.b64encode(png_bytes).decode()}},
-        ]}],
-        "generationConfig": {"responseMimeType": "application/json", "temperature": 0,
-                             "thinkingConfig": {"thinkingLevel": "minimal"}},  # ~2 s instead of ~8 s
-    }
-    for model in models:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+    override = get_key("GLIDE_MODEL")
+    models = [(override, 15)] if override else []
+    if time.time() >= _gemma_down_until:
+        models += GEMMA
+    models += FALLBACK
+    for model, timeout in models:
         try:
-            # key in a header, never in the URL, so it can't leak into logs or error messages
-            r = requests.post(url, headers={"x-goog-api-key": key}, json=body, timeout=timeout)
-            if r.status_code == 400 and "hinking" in r.text:
-                b2 = {**body, "generationConfig": {k: v for k, v in body["generationConfig"].items()
-                                                   if k != "thinkingConfig"}}
-                r = requests.post(url, headers={"x-goog-api-key": key}, json=b2, timeout=timeout)
-            if r.status_code in (404, 429, 503):
-                print(f"handwriting: {model} unavailable ({r.status_code}), trying next")
-                continue
-            if not r.ok:
-                print(f"handwriting: {model} HTTP {r.status_code}: {r.text[:120]}")
-                continue
-            text = r.json()["candidates"][0]["content"]["parts"][0]["text"]
-            out = json.loads(text)
-            out["text"] = str(out.get("text", "")).strip().strip('"')
-            out["script"] = out.get("script") or "latin"
-            out["alternatives"] = [str(a).strip() for a in out.get("alternatives", []) if str(a).strip()]
-            return out if out["text"] else None
-        except (requests.RequestException, KeyError, IndexError, ValueError) as e:
-            print(f"handwriting: {model} failed: {type(e).__name__}")
+            out = _ask(model, timeout, key, png_bytes)
+            if out:
+                last_model = out["model"] = model
+                return out
+        except (requests.RequestException, RuntimeError, KeyError, IndexError, ValueError) as e:
+            print(f"handwriting: {model} failed: {type(e).__name__} {e if isinstance(e, RuntimeError) else ''}")
+            if model.startswith("gemma"):
+                _gemma_down_until = time.time() + GEMMA_COOLDOWN
     return None
+
+
+def _health_loop():
+    """Quietly ping Gemma every 90 s, so a word is only sent to Gemma when it is answering."""
+    global _gemma_down_until
+    while True:
+        key = get_key("GEMINI_API_KEY")
+        if key:
+            model, _ = GEMMA[0]
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+            try:
+                t = time.time()
+                r = requests.post(url, headers={"x-goog-api-key": key}, timeout=8,
+                                  json={"contents": [{"parts": [{"text": "Reply with: ok"}]}],
+                                        "generationConfig": {"temperature": 0, "maxOutputTokens": 4}})
+                healthy = r.ok and time.time() - t < 5
+            except requests.RequestException:
+                healthy = False
+            _gemma_down_until = 0.0 if healthy else time.time() + GEMMA_COOLDOWN
+        time.sleep(90)
+
+
+def start_health_checks():
+    import threading
+    threading.Thread(target=_health_loop, daemon=True).start()
+
+
+def model_name(model):
+    """'gemma-4-26b-a4b-it' -> 'Gemma 4', 'gemini-flash-lite-latest' -> 'Gemini'."""
+    if not model:
+        return "Gemma"
+    return "Gemma 4" if model.startswith("gemma") else "Gemini"
 
 
 if __name__ == "__main__":

@@ -59,7 +59,7 @@ SARVAM_API_KEY=...
 |---|---|
 | **[Sarvam AI](https://www.sarvam.ai)** | All the Malayalam: **transliterate** (Manglish → Malayalam script, `varam` → വരാം), **translate** (Malayalam ↔ English), and **Bulbul text-to-speech** — each choice card is read aloud, and the 🎤 card turns your written word into a Malayalam voice note for WhatsApp. |
 | **[Devin](https://devin.ai)** (Cognition) | Built the gesture **cheat sheet** ([`glide/cheatsheet.py`](glide/cheatsheet.py), PR #1) in parallel while the gestures were being built, and picked up the mid-hackathon rename on its own. |
-| **Google Gemini** | Reads finger handwriting (Malayalam or English) from an image of the strokes in ~2 s. |
+| **Google Gemma 4** (open model) | Reads finger handwriting (Malayalam or English) from an image of the strokes. If Gemma is overloaded or slow, Gemini Flash-Lite takes over automatically (~2 s) so the user is never stuck; each card shows which model read the word. |
 | **Win32 Raw Input + hid.dll** | Raw multi-finger data from the precision touchpad — no drivers, no extra hardware. |
 | **Claude Code** | Pair-programmed the app overnight. |
 
