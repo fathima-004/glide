@@ -46,15 +46,16 @@ def test_write_mode_flow_manglish():
     assert eng.writer.mode == "choosing", eng.writer.mode
     assert eng.writer.choices == [("As written", "sari"),
                                   ("മലയാളം", "ശരി"),
-                                  (writer.VOICE, "ശരി")]
+                                  (writer.VOICE, "ശരി"),
+                                  (writer.DO_IT, "sari")]
 
-    # 3 cards: left / middle / right thirds. Rest in the middle until the ring fills.
-    one(eng, 0.2, 0.5)
+    # 4 cards: each owns a quarter of the pad. Rest on the second until the ring fills.
+    one(eng, 0.1, 0.5)
     assert eng.writer.highlight == 0 and typed == []
-    one(eng, 0.5, 0.5)               # slide over: highlight follows, ring restarts
+    one(eng, 0.35, 0.5)              # slide over: highlight follows, ring restarts
     assert eng.writer.highlight == 1
     time.sleep(writer.DWELL + 0.05)
-    one(eng, 0.5, 0.5)
+    one(eng, 0.35, 0.5)
     assert typed == ["ശരി"] and eng.writer.mode == "picked"
     eng.writer.tick(time.time() + 1)
     assert not eng.writer.active
@@ -72,6 +73,22 @@ def test_voice_card_sends_voice_note():
     w.feed([{"id": 0, "x": 0.9, "y": 0.5, "tip": True}], 1.6, time.time())
     w.feed([{"id": 0, "x": 0.9, "y": 0.5, "tip": True}], 1.6, time.time() + writer.DWELL + 0.1)
     assert sent == ["ശരി"]
+
+
+def test_do_it_card_runs_agent():
+    from glide import agent
+    eng, rec = make_engine({})
+    goals, said = [], []
+    agent.run = lambda goal, status: (goals.append(goal), status("⚡ Thinking"), "done")[2]
+    w = eng.writer
+    w.say = said.append
+    writer.threading.Thread = _InlineThread
+    w.mode, w.anchor, w.choose_t0 = "choosing", (0, 0), time.time()
+    w.choices = [("As written", "didi varam"), (writer.DO_IT, "didi varam")]
+    w._last_change = time.time()
+    w.feed([{"id": 0, "x": 0.9, "y": 0.5, "tip": True}], 1.6, time.time())
+    w.feed([{"id": 0, "x": 0.9, "y": 0.5, "tip": True}], 1.6, time.time() + writer.DWELL + 0.1)
+    assert goals == ["didi varam"] and said == ["done"] and not w.active
 
 
 class _InlineThread:
@@ -92,3 +109,5 @@ if __name__ == "__main__":
     print("ok write flow")
     test_voice_card_sends_voice_note()
     print("ok voice card")
+    test_do_it_card_runs_agent()
+    print("ok do-it card")

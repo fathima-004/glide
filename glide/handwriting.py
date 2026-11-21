@@ -107,6 +107,8 @@ def recognise(png_bytes):
         models += GEMMA
     models += FALLBACK
     for model, timeout in models:
+        if model.startswith("gemma") and time.time() < _gemma_down_until:
+            continue  # the other Gemma just failed: don't wait on this one too
         try:
             out = _ask(model, timeout, key, png_bytes)
             if out:
@@ -114,6 +116,40 @@ def recognise(png_bytes):
                 return out
         except (requests.RequestException, RuntimeError, KeyError, IndexError, ValueError) as e:
             print(f"handwriting: {model} failed: {type(e).__name__} {e if isinstance(e, RuntimeError) else ''}")
+            if model.startswith("gemma"):
+                _gemma_down_until = time.time() + GEMMA_COOLDOWN
+    return None
+
+
+def ask_json(prompt, timeout=12):
+    """Text-only JSON question for the agent: Gemma when it's answering, else Gemini."""
+    global _gemma_down_until
+    key = get_key("GEMINI_API_KEY")
+    if not key:
+        return None
+    for model, t in GEMMA + FALLBACK:
+        if model.startswith("gemma") and time.time() < _gemma_down_until:
+            continue  # Gemma is busy: go straight to the safety net
+        gen = {"temperature": 0, "thinkingConfig": {"thinkingLevel": "minimal"}}
+        if model.startswith("gemini"):
+            gen["responseMimeType"] = "application/json"
+        body = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": gen}
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+        try:
+            r = requests.post(url, headers={"x-goog-api-key": key}, json=body, timeout=max(t, timeout))
+            if r.status_code == 400 and "hinking" in r.text:
+                gen.pop("thinkingConfig")
+                r = requests.post(url, headers={"x-goog-api-key": key}, json=body, timeout=max(t, timeout))
+            if not r.ok:
+                raise RuntimeError(f"HTTP {r.status_code}")
+            parts = r.json()["candidates"][0]["content"]["parts"]
+            text = [p["text"] for p in parts if "text" in p and not p.get("thought")][-1]
+            m = re.search(r"\{.*\}", text, re.S)
+            out = json.loads(m.group(0) if m else text)
+            out["_model"] = model
+            return out
+        except (requests.RequestException, RuntimeError, KeyError, IndexError, ValueError) as e:
+            print(f"ask_json: {model} failed: {type(e).__name__} {e if isinstance(e, RuntimeError) else ''}")
             if model.startswith("gemma"):
                 _gemma_down_until = time.time() + GEMMA_COOLDOWN
     return None

@@ -57,10 +57,12 @@ def build_choices(result):
     # voice-note card: speak the Malayalam version if we have one, else the text as written
     mal = next((t for _, t in out if any("ഀ" <= ch <= "ൿ" for ch in t)), None)
     out.append((VOICE, mal or text))
+    out.append((DO_IT, text))  # Glide Agent: treat what was written as a goal
     return out
 
 
 VOICE = "\U0001F3A4 Voice note"
+DO_IT = "⚡ Do it"
 
 
 class Writer:
@@ -76,6 +78,7 @@ class Writer:
         self._pick_t0, self._pick_p0 = 0.0, None
         self.progress, self.finger_x, self.picked, self._picked_t = 0.0, None, None, 0.0
         self.audio, self.choose_t0 = {}, 0.0
+        self.agent_status = ""
 
     @property
     def active(self):
@@ -132,8 +135,25 @@ class Writer:
             self.mode, self.picked, self._picked_t = "picked", idx, now
             if label == VOICE:
                 threading.Thread(target=self._send_voice, args=(idx, text), daemon=True).start()
+            elif label == DO_IT:
+                self.mode, self.agent_status = "agent", "⚡ Thinking…"
+                threading.Thread(target=self._run_agent, args=(text,), daemon=True).start()
             else:
                 threading.Thread(target=_type_later, args=(text,), daemon=True).start()
+
+    def _run_agent(self, goal):
+        from . import agent
+
+        def status(text):
+            self.agent_status = text
+            actions_log("agent: " + text)
+
+        try:
+            result = agent.run(goal, status)
+        except Exception as e:
+            print("agent failed:", e)
+            result = "Agent failed — try again"
+        self.cancel(result)
 
     def _send_voice(self, idx, text):
         """Make a Sarvam voice clip and paste it as a file (WhatsApp shows it, ✓ sends).

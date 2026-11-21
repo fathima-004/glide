@@ -52,7 +52,8 @@ class Overlay:
         style |= WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE
         ctypes.windll.user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style)
 
-    def show_label(self, text, pos, seconds=1.4):
+    def show_label(self, text, pos, seconds=None):
+        seconds = seconds or max(1.4, len(text) / 12)  # long messages stay up long enough to read
         self.label, self.label_pos, self.label_until = text, pos, time.time() + seconds
 
     def _pill(self, x, y, text, color, size=13):
@@ -154,6 +155,9 @@ class Overlay:
                     cv.create_oval(x - 4, y - 4, x + 4, y + 4, fill="#ffffff", outline="")
         elif wr.mode in ("choosing", "picked"):
             self._draw_cards(wr, ax, ay, now)
+        elif wr.mode == "agent":
+            dots = "•" * (1 + int(now * 3) % 3)
+            self._pill(ax, ay - 60, f"{wr.agent_status}  {dots}", "#ffb84d", size=16)
 
     def _round_rect(self, x0, y0, x1, y1, r, **kw):
         pts = [x0 + r, y0, x1 - r, y0, x1, y0, x1, y0 + r, x1, y1 - r, x1, y1,
@@ -161,7 +165,7 @@ class Overlay:
         return self.canvas.create_polygon(pts, smooth=True, **kw)
 
     CARD_COLORS = {"As written": "#39f5ff", "English": "#39f5ff", "Translation": "#ff6fd8",
-                   "Or": "#8aa0b4", "\U0001F3A4 Voice note": "#7cff6b"}
+                   "Or": "#8aa0b4", "\U0001F3A4 Voice note": "#7cff6b", "⚡ Do it": "#ffb84d"}
 
     def _draw_cards(self, wr, ax, ay, now):
         cv = self.canvas
