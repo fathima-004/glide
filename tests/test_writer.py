@@ -36,7 +36,9 @@ def test_write_mode_flow_manglish():
     sarvam.speak_to_file = lambda text, path: False
     writer.threading.Thread = _InlineThread
     writer._type_later = lambda text: actions.type_text(text)  # skip the small delay
-    from glide import contacts
+    writer.in_whatsapp_web = lambda: False  # never look at the real screen in tests
+    from glide import agent, contacts
+    agent.open_chat = lambda contact, status: None
     contacts.send_targets = lambda limit=3: [("\U0001F4AC Didi", "whatsapp", "Didi Ltst")]
 
     two(eng)
@@ -114,20 +116,21 @@ def test_language_options():
 
 
 def test_voice_note_only_in_whatsapp_web():
-    handwriting.recognise = lambda png: {"text": "varaam", "script": "latin", "language": "manglish",
-                                         "alternatives": []}
+    from glide import agent
+    agent.open_chat = lambda contact, status: None
     sarvam.manglish_to_malayalam = lambda t: "വരാം"
     sarvam.translate = lambda t, s, d: "I will come"
     writer.threading.Thread = _InlineThread
-    for in_wa, expected in ((False, 2), (True, 3)):
+    for in_wa, text, expected in ((False, "varaam", 2), (True, "didi varaam", 3)):
         writer.in_whatsapp_web = lambda: in_wa
+        handwriting.recognise = lambda png: {"text": text, "script": "latin", "language": "manglish",
+                                             "alternatives": []}
         eng, rec = make_engine({})
         w = eng.writer
         w.start((0, 0))
         w._read([[(0, 0), (1, 1)]])
         assert len(w.choices) == expected, w.choices
     assert w.choices[-1] == (writer.VOICE, "വരാം")  # voice note in Malayalam
-    assert w.wa_contact is None  # one word: no contact, just the message
 
 
 def test_whatsapp_first_word_is_the_contact():
@@ -139,21 +142,31 @@ def test_whatsapp_first_word_is_the_contact():
     sarvam.translate = lambda t, s, d: "Work is finished"
     writer.threading.Thread = _InlineThread
     writer.in_whatsapp_web = lambda: True
+    from glide import agent
+    opened, sent = [], []
+    agent.open_chat = lambda contact, status: opened.append(contact)
+    agent.send_text_here = lambda contact, msg, status, cancelled: (sent.append((contact, msg)), "ok")[1]
     eng, rec = make_engine({})
     w = eng.writer
     w.start((0, 0))
-    w._read([[(0, 0), (1, 1)]])
-    assert w.wa_contact == "Rashid" and w.header == "To: Rashid"
+    w._read([[(0, 0), (1, 1)]])        # name and message in one go
+    assert opened == ["Rashid"] and w.chat_open and w.header == "To: Rashid"
     assert w.choices[0] == ("English", "Work is finished")
-    sent = []
-    w._run_send = lambda kind, who, text: sent.append((kind, who, text))
     w.feed([{"id": 0, "x": 0.1, "y": 0.5, "tip": True}], 1.6, time.time())
     w.feed([{"id": 0, "x": 0.1, "y": 0.5, "tip": True}], 1.6, time.time() + writer.DWELL + 0.1)
-    assert sent == [("whatsapp", "Rashid", "Work is finished")]
-    handwriting.recognise = lambda png: {"text": "didi varaam", "script": "latin", "language": "manglish"}
+    assert sent == [("Rashid", "Work is finished")] and opened == ["Rashid"]  # no second search
+
+    # name first, pause, then the message
+    opened.clear()
+    sent.clear()
+    handwriting.recognise = lambda png: {"text": "didi", "script": "latin", "language": "english"}
     w.start((0, 0))
     w._read([[(0, 0), (1, 1)]])
-    assert w.wa_contact == "Didi Ltst"  # favourite nickname
+    assert opened == ["Didi Ltst"] and w.mode == "writing" and w.choices == []  # favourite nickname
+    handwriting.recognise = lambda png: {"text": "pani kazhinju", "script": "latin", "language": "manglish"}
+    w._read([[(0, 0), (1, 1)]])
+    assert w.mode == "choosing" and w.wa_contact == "Didi Ltst" and opened == ["Didi Ltst"]
+    assert w.choices[0] == ("English", "Work is finished")
 
 
 def test_slant_swipes_pick_the_app():

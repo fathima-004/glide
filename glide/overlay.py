@@ -143,8 +143,15 @@ class Overlay:
         y0 = ay - bh - 70 if ay - bh - 70 > 20 else ay + 50
         if wr.mode in ("writing", "reading"):
             # no board: the ink is written straight over the screen, with a small hint above it
-            title = "✍ Write a word" if wr.mode == "writing" else "Reading with Gemma…"
-            self._pill(x0 + bw / 2, y0 - 6, title, CYAN, size=12)
+            if wr.mode == "reading":
+                title = "Reading with Gemma…"
+            elif wr.wa_contact:
+                title = f"✍ Now write the message for {wr.wa_contact}"
+            elif wr.in_whatsapp:
+                title = "✍ Write the name, then the message"
+            else:
+                title = "✍ Write a word"
+            self._pill(x0 + bw / 2, y0 - 6, title, "#7cff6b" if wr.wa_contact else CYAN, size=12)
             a = self.engine.aspect or 1.6
             for s in list(wr.strokes):
                 pts = [(x0 + px / a * bw, y0 + py * bh) for px, py in list(s)]

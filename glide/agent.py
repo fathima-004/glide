@@ -290,10 +290,20 @@ def open_chat(contact, status):
     return None
 
 
-def send_voice_note(contact, path, status, cancelled):
-    """Open the contact's chat, paste the voice-note file, and send it after the countdown."""
+def send_text_here(contact, msg, status, cancelled):
+    """The contact's chat is already open: type the message and send after the countdown."""
+    status(f"⚡ Typing to {contact}…")
+    actions.type_text(msg)
+    if not _countdown(f"Sending to {contact}", status, cancelled):
+        return "Not sent — the message is waiting in the chat"
+    actions.press("enter")
+    return f"✓ Sent to {contact}: “{msg}”"
+
+
+def send_voice_note(contact, path, status, cancelled, chat_open=False):
+    """Open the contact's chat (unless it's open), paste the voice-note file, send after the countdown."""
     import subprocess
-    err = open_chat(contact, status)
+    err = None if chat_open else open_chat(contact, status)
     if err:
         return err
     status(f"⚡ Attaching voice note for {contact}…")

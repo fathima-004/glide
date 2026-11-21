@@ -145,6 +145,7 @@ class Writer:
         self.finger_y = None
         self.in_whatsapp = False
         self.wa_contact = None    # in WhatsApp: the person named by the first word
+        self.chat_open = False    # their chat has been opened already
         self.header = ""          # shown above the cards, e.g. "To: Rashid"
         self._swipe = None        # (x, y, time) where the current touch started, for slant swipes
 
@@ -154,7 +155,7 @@ class Writer:
 
     def start(self, anchor):
         self.in_whatsapp = in_whatsapp_web()  # the voice-note option only makes sense there
-        self.wa_contact, self.header = None, ""
+        self.wa_contact, self.header, self.chat_open = None, "", False
         self.mode, self.strokes, self.choices, self.anchor = "writing", [], [], anchor
         self._last_change, self._touching = time.time(), False
         self._await_release = True  # the two fingers that opened write mode are still down
@@ -240,8 +241,7 @@ class Writer:
                 threading.Thread(target=self._wa_voice, args=(self.wa_contact, text), daemon=True).start()
             elif self.wa_contact:                     # WhatsApp: message to the named person
                 self.mode, self.agent_status = "agent", f"⚡ To {self.wa_contact}…"
-                threading.Thread(target=self._run_send, args=("whatsapp", self.wa_contact, text),
-                                 daemon=True).start()
+                threading.Thread(target=self._wa_text, args=(self.wa_contact, text), daemon=True).start()
             elif label == VOICE:
                 threading.Thread(target=self._send_voice, args=(idx, text), daemon=True).start()
             elif label == DO_IT:
@@ -273,6 +273,21 @@ class Writer:
         self.highlight, self._last_change = None, time.time()
         self.say("Pick who — bottom half")
 
+    def _wa_text(self, contact, text):
+        """Text message to the WhatsApp contact; their chat is normally open already."""
+        from . import agent
+        self._agent_lifted, self._agent_touched = False, False
+        cancelled = lambda: self._agent_touched  # noqa: E731
+        try:
+            if self.chat_open:
+                result = agent.send_text_here(contact, text, self._agent_status, cancelled)
+            else:
+                result = agent._whatsapp({"contact": contact, "message": text}, self._agent_status, cancelled)
+        except Exception as e:
+            print("send failed:", e)
+            result = "Couldn't send — try again"
+        self.cancel(result)
+
     def _wa_voice(self, contact, text):
         """Sarvam voice clip (OGG/Opus, WhatsApp's own format) sent to a WhatsApp contact."""
         import os
@@ -291,7 +306,8 @@ class Writer:
             else:
                 self.cancel("Voice failed — try again")
                 return
-            result = agent.send_voice_note(contact, path, self._agent_status, lambda: self._agent_touched)
+            result = agent.send_voice_note(contact, path, self._agent_status, lambda: self._agent_touched,
+                                           chat_open=self.chat_open)
         except Exception as e:
             print("voice note failed:", e)
             result = "Voice failed — try again"
@@ -429,18 +445,28 @@ class Writer:
             self.mode, self.agent_status = "agent", "⚡ " + result["text"]
             self._run_agent(result["text"])
             return
-        if self.in_whatsapp:
+        if self.in_whatsapp and not self.wa_contact:
+            # in WhatsApp: the first word names the person (any WhatsApp contact). Open their chat
+            # right away; the rest (written now or after a pause) is the message.
+            from . import agent, contacts
             words = result["text"].split()
-            if len(words) >= 2:
-                # in WhatsApp: first word = who it's for (any WhatsApp contact), the rest = message
-                from . import contacts
-                nick = words[0].strip(",.:-")
-                self.wa_contact = contacts.load().get(nick.lower()) or nick[:1].upper() + nick[1:]
-                self.header = f"To: {self.wa_contact}"
-                result = dict(result, text=" ".join(words[1:]))
-                if result.get("language") == "malayalam" and not any(
-                        "ഀ" <= ch <= "ൿ" for ch in result["text"]):
-                    result["language"] = "unknown"
+            nick = words[0].strip(",.:-")
+            self.wa_contact = contacts.load().get(nick.lower()) or nick[:1].upper() + nick[1:]
+            self.header = f"To: {self.wa_contact}"
+            self.mode = "agent"
+            err = agent.open_chat(self.wa_contact, self._agent_status)
+            if err:
+                self.cancel(err)
+                return
+            self.chat_open = True
+            if len(words) < 2:  # only the name so far: now write the message
+                self.mode, self.strokes, self._touching = "writing", [], False
+                self._await_release, self._last_change = False, time.time()
+                return
+            result = dict(result, text=" ".join(words[1:]))
+            if result.get("language") == "malayalam" and not any(
+                    "ഀ" <= ch <= "ൿ" for ch in result["text"]):
+                result["language"] = "unknown"
         typed = build_choices(result)
         if self.in_whatsapp:
             # in WhatsApp Web: offer a Sarvam voice note (Malayalam if there is a Malayalam option)
