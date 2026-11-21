@@ -93,7 +93,8 @@ def quick_mail(goal):
     subject = written.get("subject") or what[:1].upper() + what[1:]
     body = written.get("body") or what[:1].upper() + what[1:] + ".\n\nThanks,"
     greeting = "Hi,"
-    if written.get("language") == "ml" or is_mal_script:
+    # Manglish -> English email (what most inboxes expect); only Malayalam *script* stays Malayalam
+    if is_mal_script:
         # Malayalam in -> Malayalam out, written by Sarvam
         if written.get("subject"):
             subject = sarvam.translate(subject, "en-IN", "ml-IN") or subject

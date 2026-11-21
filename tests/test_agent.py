@@ -24,8 +24,11 @@ def test_mail_recipient_comes_from_what_was_written():
     agent.handwriting.ask_json = lambda prompt: {"subject": "Work finished", "body": "The work is finished.",
                                                  "language": "ml"}
     agent.sarvam.translate = lambda text, s, d: "[ml]" + text
-    p = agent.quick_mail("mail rashrahn pani kazhinju")
-    assert p["to"] == "rashrahn@gmail.com" and p["subject"] == "[ml]Work finished"
+    p = agent.quick_mail("mail rashrahn pani kazhinju")          # Manglish -> English email
+    assert p["to"] == "rashrahn@gmail.com" and p["subject"] == "Work finished"
+    assert p["body"].startswith("Hi,") and "The work is finished." in p["body"]
+    p = agent.quick_mail("mail rashrahn ജോലി കഴിഞ്ഞു")  # script -> Malayalam
+    assert p["subject"] == "[ml]Work finished"
     assert p["body"].startswith("നമസ്കാരം") and "[ml]The work" in p["body"]
     agent.handwriting.ask_json = lambda prompt: None  # AI down: still sends something sensible
     p = agent.quick_mail("mail rashrahn work done")
