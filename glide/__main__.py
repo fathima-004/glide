@@ -1,7 +1,7 @@
-"""Run Thottu:  python -m thottu          (overlay + tray icon)
-               python -m thottu --debug  (print finger data, no overlay)
+"""Run Glide:  python -m glide          (overlay + tray icon)
+               python -m glide --debug  (print finger data, no overlay)
 
-Ctrl+Alt+T turns Thottu on/off.  Ctrl+Alt+Q quits."""
+Ctrl+Alt+T turns Glide on/off.  Ctrl+Alt+Q quits."""
 import ctypes
 import sys
 import time
@@ -22,7 +22,7 @@ class State:
             from . import actions
             actions.mouse_up()
         self.engine.state, self.engine.stroke = "idle", []
-        self.engine._say("Thottu ON" if self.enabled else "Thottu OFF")
+        self.engine._say("Glide ON" if self.enabled else "Glide OFF")
         if self.tray:
             self.tray.refresh()
 
@@ -48,7 +48,10 @@ def main():
             print(" | ".join(f"id{c['id']} {'DOWN' if c['tip'] else 'up  '} "
                              f"x={c['x']:.3f} y={c['y']:.3f}" for c in contacts), flush=True)
 
-    reader = TouchpadReader(on_frame, on_toggle=state.toggle)
+    def on_teach():
+        engine.ui_request = "teach"
+
+    reader = TouchpadReader(on_frame, on_toggle=state.toggle, on_teach=on_teach)
     reader.start()
     reader.ready.wait(5)
     if reader.error:
@@ -70,7 +73,7 @@ def main():
         print("tray unavailable:", e)
 
     from .overlay import Overlay
-    engine._say("Thottu ON")
+    engine._say("Glide ON")
     Overlay(engine).run()
 
 

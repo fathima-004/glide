@@ -142,9 +142,9 @@ class Writer:
         import subprocess
         import tempfile
         safe = "".join(ch for ch in text if ch.isalnum() or ch in " _-")[:30].strip() or "message"
-        folder = os.path.join(tempfile.gettempdir(), "thottu_voice")
+        folder = os.path.join(tempfile.gettempdir(), "glide_voice")
         os.makedirs(folder, exist_ok=True)
-        path = os.path.join(folder, f"Thottu voice - {safe}.wav")
+        path = os.path.join(folder, f"Glide voice - {safe}.wav")
         src = self.audio.get(idx)
         try:
             if src and os.path.exists(src):
@@ -186,7 +186,7 @@ class Writer:
                 if text in done:
                     self.audio[i] = done[text]
                     continue
-                path = os.path.join(tempfile.gettempdir(), f"thottu_choice_{i}.wav")
+                path = os.path.join(tempfile.gettempdir(), f"glide_choice_{i}.wav")
                 if sarvam.speak_to_file(text, path):
                     done[text] = self.audio[i] = path
                     if self.highlight == i:
@@ -247,7 +247,7 @@ def _chime():
         import wave
         import winsound
         if _CHIME is None:
-            _CHIME = os.path.join(tempfile.gettempdir(), "thottu_chime.wav")
+            _CHIME = os.path.join(tempfile.gettempdir(), "glide_chime.wav")
             rate = 22050
             frames = bytearray()
             for freq, dur in ((880, 0.09), (1320, 0.16)):

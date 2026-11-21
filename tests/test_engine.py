@@ -1,7 +1,7 @@
 """Drive the gesture engine with fake finger frames; actions are recorded, not sent."""
 import time
 
-from thottu import actions, gestures
+from glide import actions, gestures
 
 
 class Recorder:

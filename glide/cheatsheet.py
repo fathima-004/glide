@@ -1,8 +1,8 @@
-"""Gesture cheat sheet: a dark, always-on-top window listing every Thottu gesture.
+"""Gesture cheat sheet: a dark, always-on-top window listing every Glide gesture.
 
-    python -m thottu.cheatsheet          (opens it on its own)
+    python -m glide.cheatsheet          (opens it on its own)
 
-    from thottu.cheatsheet import show_cheatsheet
+    from glide.cheatsheet import show_cheatsheet
     show_cheatsheet()                    (from inside a running Tk app: opens a Toplevel)
 
 The window is centred, closes on Esc, on any click, or by itself after 25 seconds.
@@ -28,7 +28,8 @@ WIDTH, HEIGHT = 960, 620   # logical size at 100 % display scaling
 TIMEOUT_MS = 25_000        # auto-close delay
 TICK_MS = 50               # countdown bar refresh
 
-TITLE = "Thottu — your whole laptop, with one finger"
+APP = "Glide"
+TITLE = f"{APP} - your whole laptop, with one finger"
 
 
 # --------------------------------------------------------------------------- content
@@ -106,7 +107,7 @@ class CheatSheet:
 
     def _setup_window(self):
         win = self.win
-        win.title("Thottu cheat sheet")
+        win.title(f"{APP} cheat sheet")
         win.configure(bg=BG)
         win.overrideredirect(True)          # borderless
         win.attributes("-topmost", True)
@@ -160,8 +161,8 @@ class CheatSheet:
         cv.create_rectangle(0, 0, self.w, self.h, outline=CARD_EDGE, width=s(2))
 
         # Header: title + tagline
-        x = self._runs(s(40), s(46), [("Thottu", "key")], CYAN, 24)
-        self._runs(x, s(46), [(TITLE[len("Thottu"):], "")], CYAN, 24)
+        x = self._runs(s(40), s(46), [(APP, "key")], CYAN, 24)
+        self._runs(x, s(46), [(TITLE[len(APP):], "")], CYAN, 24)
         cv.create_text(s(40), s(80), anchor="w", text="Just touch. Don't press.",
                        fill=MUTED, font=self._font(12))
 

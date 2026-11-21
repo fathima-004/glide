@@ -190,10 +190,11 @@ class _Device:
 class TouchpadReader(threading.Thread):
     """Background thread. Calls on_frame(contacts, aspect) for every touch frame."""
 
-    def __init__(self, on_frame, on_toggle=None):
+    def __init__(self, on_frame, on_toggle=None, on_teach=None):
         super().__init__(daemon=True)
         self.on_frame = on_frame
         self.on_toggle = on_toggle
+        self.on_teach = on_teach
         self.devices = {}
         self.hwnd = None
         self.ready = threading.Event()
@@ -207,11 +208,13 @@ class TouchpadReader(threading.Thread):
                 print("touchpad parse error:", e)
             return user32.DefWindowProcW(hwnd, msg, wparam, lparam)
         if msg == 0x0312:  # WM_HOTKEY
-            if wparam == 1:  # Ctrl+Alt+Q quits Thottu
+            if wparam == 1:  # Ctrl+Alt+Q quits Glide
                 import os
                 os._exit(0)
             if wparam == 2 and self.on_toggle:  # Ctrl+Alt+T turns it on/off
                 self.on_toggle()
+            if wparam == 3 and self.on_teach:  # Ctrl+Alt+N teaches a new shape
+                self.on_teach()
             return 0
         if msg == WM_DESTROY:
             user32.PostQuitMessage(0)
@@ -245,9 +248,9 @@ class TouchpadReader(threading.Thread):
         wc = WNDCLASSW()
         wc.lpfnWndProc = self._proc
         wc.hInstance = hinst
-        wc.lpszClassName = "ThottuTouchpadSink"
+        wc.lpszClassName = "GlideTouchpadSink"
         user32.RegisterClassW(ctypes.byref(wc))
-        self.hwnd = user32.CreateWindowExW(0, wc.lpszClassName, "Thottu", 0, 0, 0, 0, 0,
+        self.hwnd = user32.CreateWindowExW(0, wc.lpszClassName, "Glide", 0, 0, 0, 0, 0,
                                            None, None, hinst, None)  # hidden top-level window
         rid = RAWINPUTDEVICE(PAGE_DIGITIZER, USAGE_TOUCHPAD, RIDEV_INPUTSINK, self.hwnd)
         if not user32.RegisterRawInputDevices(ctypes.byref(rid), 1, ctypes.sizeof(rid)):
@@ -256,6 +259,7 @@ class TouchpadReader(threading.Thread):
             return
         user32.RegisterHotKey(self.hwnd, 1, 0x0001 | 0x0002 | 0x4000, ord("Q"))  # Alt+Ctrl, no repeat
         user32.RegisterHotKey(self.hwnd, 2, 0x0001 | 0x0002 | 0x4000, ord("T"))
+        user32.RegisterHotKey(self.hwnd, 3, 0x0001 | 0x0002 | 0x4000, ord("N"))
         self.ready.set()
         msg = wt.MSG()
         while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:

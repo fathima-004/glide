@@ -4,7 +4,7 @@ import time
 
 from PIL import Image
 
-from thottu import actions, gestures, handwriting, sarvam, writer
+from glide import actions, gestures, handwriting, sarvam, writer
 from tests.test_engine import make_engine, lift
 
 
