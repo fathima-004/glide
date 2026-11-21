@@ -1,5 +1,7 @@
-"""Run Thottu:  python -m thottu          (overlay)
-               python -m thottu --debug  (print finger data, no overlay)"""
+"""Run Thottu:  python -m thottu          (overlay + tray icon)
+               python -m thottu --debug  (print finger data, no overlay)
+
+Ctrl+Alt+T turns Thottu on/off.  Ctrl+Alt+Q quits."""
 import ctypes
 import queue
 import sys
@@ -7,6 +9,20 @@ import time
 
 from .gestures import GestureEngine
 from .touchpad import TouchpadReader
+
+
+class State:
+    def __init__(self, engine):
+        self.enabled = True
+        self.engine = engine
+        self.tray = None
+
+    def toggle(self):
+        self.enabled = not self.enabled
+        self.engine.state, self.engine.stroke = "idle", []
+        self.engine._say("Thottu ON" if self.enabled else "Thottu OFF")
+        if self.tray:
+            self.tray.refresh()
 
 
 def main():
@@ -18,8 +34,11 @@ def main():
     debug = "--debug" in sys.argv
     frames = queue.Queue()
     engine = GestureEngine()
+    state = State(engine)
 
     def on_frame(contacts, aspect):
+        if not state.enabled:
+            return
         engine.feed(contacts, aspect)
         if debug:
             lbl = engine.pop_label()
@@ -30,7 +49,7 @@ def main():
         else:
             frames.put((contacts, aspect))
 
-    reader = TouchpadReader(on_frame)
+    reader = TouchpadReader(on_frame, on_toggle=state.toggle)
     reader.start()
     reader.ready.wait(5)
     if reader.error:
@@ -44,7 +63,15 @@ def main():
         except KeyboardInterrupt:
             return
 
+    try:
+        from .tray import Tray
+        state.tray = Tray(state)
+        state.tray.start()
+    except Exception as e:  # tray is a nicety; keep running without it
+        print("tray unavailable:", e)
+
     from .overlay import Overlay
+    engine._say("Thottu ON")
     Overlay(frames, engine).run()
 
 

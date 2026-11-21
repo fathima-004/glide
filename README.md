@@ -18,7 +18,10 @@ python -m thottu           # glowing finger-trail overlay
 python -m thottu --debug   # print raw finger data
 ```
 
-Press **Ctrl + Alt + Q** to quit.
+Or double-click `Thottu.bat`. Install the tray icon libraries once: `pip install -r requirements.txt`.
+
+- **Ctrl + Alt + T** turns Thottu on / off (also from the tray icon near the clock)
+- **Ctrl + Alt + Q** quits
 
 ## Status
 
