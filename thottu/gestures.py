@@ -111,15 +111,48 @@ def recognise(points):
 LABELS = {
     "copy": "Copied", "paste": "Pasted", "undo": "Undo",
     "enter": "Enter ✓", "screenshot": "Screenshot",
+    "task_view": "All windows", "switch_app": "Switch app",
+    "desktop": "Desktop", "right_click": "Right-click",
+    "volume_up": "\U0001F50A Volume +", "volume_down": "\U0001F509 Volume −",
+    "brightness_up": "☀ Brighter", "brightness_down": "☀ Dimmer",
+    "next_tab": "Next tab →", "prev_tab": "← Previous tab",
 }
+
+# Hold a finger still in a corner, then lift (no click, so nothing gets tapped by accident).
+CORNERS = {"tl": "task_view", "tr": "switch_app", "bl": "desktop", "br": "right_click"}
+CORNER_X, CORNER_Y = 0.15, 0.22
+EDGE_X, EDGE_Y = 0.07, 0.10
+SLIDE_STEP = 0.035   # pad height per volume/brightness step
+TAB_STEP = 0.14      # pad width per tab
+SLIDER_TEXT = {"left": "\U0001F50A Volume", "right": "☀ Brightness", "top": "Tabs"}
+
+
+def zone(x, y):
+    """Return (corner, edge) for a raw pad position; at most one is set."""
+    h = "l" if x < CORNER_X else "r" if x > 1 - CORNER_X else None
+    v = "t" if y < CORNER_Y else "b" if y > 1 - CORNER_Y else None
+    if h and v:
+        return v + h, None
+    if x < EDGE_X:
+        return None, "left"
+    if x > 1 - EDGE_X:
+        return None, "right"
+    if y < EDGE_Y:
+        return None, "top"
+    return None, None
 
 
 class GestureEngine:
     """Feed it touch frames; it runs actions. Overlay reads .state / .stroke / pop_label()."""
 
     def __init__(self):
-        self.state = "idle"      # idle | hold | armed | drawing | cursor | multi
+        self.state = "idle"      # idle | hold | armed | drawing | cursor | multi | drag | slider
         self.stroke = []
+        self.corner = None       # which corner the touch started in, if any
+        self.edge = None         # which edge the touch started on, if any
+        self.slider_text = ""
+        self._r0 = (0.0, 0.0)
+        self._slide_acc, self._slide_last = 0.0, (0.0, 0.0)
         self.aspect = 1.6
         self._t0 = 0.0
         self._p0 = (0.0, 0.0)
@@ -147,6 +180,14 @@ class GestureEngine:
         if not down:
             if self.state == "drawing":
                 self._finish()
+            elif self.state == "armed" and self.corner:
+                actions.restore_cursor(self._cursor0)
+                name = CORNERS[self.corner]
+                log(f"corner {self.corner} -> {name}")
+                self._say(LABELS[name])
+                threading.Thread(target=actions.run, args=(name,), daemon=True).start()
+            elif self.state == "slider":
+                log(f"slider {self.edge} end")
             elif self.state in ("hold", "armed"):
                 log(f"lifted while {self.state} after {now - self._t0:.2f}s (no drawing)")
             elif self.state == "drag":
@@ -167,13 +208,22 @@ class GestureEngine:
 
         c = down[0]
         p = (c["x"] * aspect, c["y"])  # keep the real shape of the drawing
+        r = (c["x"], c["y"])  # raw pad position 0..1, for zones
         if self.state == "idle":
-            self.state, self._t0, self._p0 = "hold", now, p
+            self.state, self._t0, self._p0, self._r0 = "hold", now, p, r
             self._cursor0 = actions.get_cursor()
+            self.corner, self.edge = zone(*r)
         elif self.state == "hold":
             if math.dist(p, self._p0) > HOLD_SLOP * aspect:
-                self.state = "cursor"  # normal mouse use; ignore until lift
-                log(f"moved after {now - self._t0:.2f}s -> normal mouse")
+                dx, dy = r[0] - self._r0[0], r[1] - self._r0[1]
+                if (self.edge in ("left", "right") and abs(dy) > abs(dx)) or \
+                        (self.edge == "top" and abs(dx) > abs(dy)):
+                    self.state, self._slide_acc, self._slide_last = "slider", 0.0, r
+                    self.slider_text = SLIDER_TEXT[self.edge]
+                    log(f"slider {self.edge} start")
+                else:
+                    self.state = "cursor"  # normal mouse use; ignore until lift
+                    log(f"moved after {now - self._t0:.2f}s -> normal mouse")
             elif now - self._t0 >= HOLD_TIME:
                 self.state, self.stroke = "armed", [p]
                 self._cursor0 = actions.get_cursor()
@@ -185,6 +235,26 @@ class GestureEngine:
                 self.state = "drawing"
         elif self.state == "drawing":
             self.stroke.append(p)
+        elif self.state == "slider":
+            self._slide(r)
+
+    def _slide(self, r):
+        """Finger running along an edge: left = volume, right = brightness, top = tabs."""
+        actions.restore_cursor(self._cursor0)  # keep the pointer still while sliding
+        if self.edge == "top":
+            self._slide_acc += r[0] - self._slide_last[0]
+            step, up_name, down_name = TAB_STEP, "next_tab", "prev_tab"
+        else:
+            self._slide_acc += self._slide_last[1] - r[1]  # finger up = more
+            step = SLIDE_STEP
+            up_name, down_name = (("volume_up", "volume_down") if self.edge == "left"
+                                  else ("brightness_up", "brightness_down"))
+        self._slide_last = r
+        while abs(self._slide_acc) >= step:
+            name = up_name if self._slide_acc > 0 else down_name
+            self._slide_acc -= step if self._slide_acc > 0 else -step
+            self.slider_text = LABELS[name]
+            actions.run_now(name)
 
     def _drag(self, down):
         """Three fingers: hold the left button and move the cursor. Lifting all fingers drops."""

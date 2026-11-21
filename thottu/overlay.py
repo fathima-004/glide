@@ -12,7 +12,7 @@ import time
 import tkinter as tk
 
 from . import actions
-from .gestures import HOLD_TIME
+from .gestures import CORNERS, HOLD_TIME, LABELS
 
 KEY = "#010101"  # transparent colour key
 GOLD, GOLD_GLOW = "#ffd23f", "#5c4a10"
@@ -64,13 +64,20 @@ class Overlay:
         cx, cy = actions.get_cursor()
         state = eng.state
 
-        if state == "hold":
+        if state == "hold" or (state == "armed" and eng.corner):
             frac = min((now - eng._t0) / HOLD_TIME, 1.0)
             if frac > 0.15:  # don't flash on every normal touch
                 r = 26
                 cv.create_oval(cx - r, cy - r, cx + r, cy + r, outline="#3a4a5c", width=5)
                 cv.create_arc(cx - r, cy - r, cx + r, cy + r, start=90, extent=-359.9 * frac,
                               style="arc", outline=GOLD, width=5)
+                if eng.corner:
+                    text = LABELS[CORNERS[eng.corner]]
+                    self._pill(cx, cy - 56, ("Lift: " + text) if state == "armed" else text,
+                               GOLD if state == "armed" else "#8aa0b4")
+
+        elif state == "slider":
+            self._pill(cx, cy - 50, eng.slider_text, CYAN, size=16)
 
         elif state in ("armed", "drawing"):
             ax, ay = eng.anchor or (cx, cy)

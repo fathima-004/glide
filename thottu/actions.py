@@ -1,5 +1,7 @@
 """Keyboard shortcuts, mouse and cursor helpers, sent with plain Win32 calls."""
 import ctypes
+import subprocess
+import threading
 import time
 from ctypes import wintypes as wt
 
@@ -52,15 +54,75 @@ def move_by(dx, dy):
                         min(max(int(round(y + dy)), 0), h - 1))
 
 
+def right_click():
+    user32.mouse_event(0x0008, 0, 0, 0, 0)
+    user32.mouse_event(0x0010, 0, 0, 0, 0)
+
+
+def tap_vk(code, times=1):
+    for _ in range(times):
+        user32.keybd_event(code, 0, 0, 0)
+        user32.keybd_event(code, 0, KEYUP, 0)
+
+
+# --- brightness: WMI is slow, so set a target and apply it once the finger settles ---
+_bright = {"level": None, "target": None, "timer": None}
+_bright_lock = threading.Lock()
+_NO_WINDOW = 0x08000000
+
+
+def _ps(cmd):
+    return subprocess.run(["powershell", "-NoProfile", "-Command", cmd], capture_output=True,
+                          text=True, creationflags=_NO_WINDOW, timeout=10).stdout.strip()
+
+
+def _apply_brightness():
+    with _bright_lock:
+        target = _bright["target"]
+    _ps("(Get-CimInstance -Namespace root/wmi -ClassName WmiMonitorBrightnessMethods)"
+        f" | Invoke-CimMethod -MethodName WmiSetBrightness -Arguments @{{Timeout=1; Brightness={target}}}")
+
+
+def brightness_step(delta):
+    with _bright_lock:
+        if _bright["level"] is None:
+            try:
+                _bright["level"] = int(_ps("(Get-CimInstance -Namespace root/wmi "
+                                           "-ClassName WmiMonitorBrightness).CurrentBrightness"))
+            except (ValueError, subprocess.SubprocessError):
+                _bright["level"] = 50
+        _bright["level"] = min(max(_bright["level"] + delta, 0), 100)
+        _bright["target"] = _bright["level"]
+        if _bright["timer"]:
+            _bright["timer"].cancel()
+        _bright["timer"] = threading.Timer(0.15, _apply_brightness)
+        _bright["timer"].start()
+    return _bright["level"]
+
+
 ACTIONS = {
     "copy": lambda: press("ctrl", "c"),
     "paste": lambda: press("ctrl", "v"),
     "undo": lambda: press("ctrl", "z"),
     "enter": lambda: press("enter"),
     "screenshot": lambda: press("win", "printscreen"),  # saved to Pictures\Screenshots
+    "task_view": lambda: press("win", "tab"),
+    "switch_app": lambda: press("alt", "tab"),
+    "desktop": lambda: press("win", "d"),
+    "right_click": right_click,
+    "volume_up": lambda: tap_vk(0xAF, 2),
+    "volume_down": lambda: tap_vk(0xAE, 2),
+    "brightness_up": lambda: brightness_step(+6),
+    "brightness_down": lambda: brightness_step(-6),
+    "next_tab": lambda: press("ctrl", "tab"),
+    "prev_tab": lambda: press("ctrl", "shift", "tab"),
 }
 
 
 def run(name):
     time.sleep(0.05)  # let the finger-lift settle first
+    ACTIONS[name]()
+
+
+def run_now(name):
     ACTIONS[name]()

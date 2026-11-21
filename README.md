@@ -35,6 +35,10 @@ Three-finger gestures → Swipes** to **Nothing**.
 | … draw **✓** | Enter |
 | … draw **○** | Screenshot |
 | Slide with three fingers | Drag, no pressing |
+| Hold still in a **corner**, then lift | ↖ all windows · ↗ switch app · ↙ desktop · ↘ right-click |
+| Slide along the **left edge** | Volume |
+| Slide along the **right edge** | Brightness |
+| Slide along the **top edge** | Previous / next tab |
 
 Feedback appears right at the mouse cursor, so it's where you're already looking.
 
@@ -45,5 +49,5 @@ Feedback appears right at the mouse cursor, so it's where you're already looking
 - [x] Draw-to-shortcut: C copy · V paste · Z undo · ✓ enter · ○ screenshot
 - [x] Three-finger drag, no pressing
 - [x] On/off toggle, tray icon, double-click launcher
-- [ ] Corner taps + edge sliders
+- [x] Corner actions + edge sliders (volume, brightness, tabs)
 - [ ] Write Malayalam / English with your finger
