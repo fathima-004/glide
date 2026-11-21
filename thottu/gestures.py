@@ -5,10 +5,22 @@ The shape is matched against templates ($1-recognizer style) and the matching
 action runs. The cursor is put back where it was before the drawing started.
 """
 import math
+import os
+import tempfile
 import threading
 import time
 
 from . import actions
+
+LOG_PATH = os.path.join(tempfile.gettempdir(), "thottu.log")
+
+
+def log(msg):
+    try:
+        with open(LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(time.strftime("%H:%M:%S ") + msg + "\n")
+    except OSError:
+        pass
 
 HOLD_TIME = 0.35     # seconds still before draw mode arms
 HOLD_SLOP = 0.015    # how far (pad fraction) the finger may wander while holding
@@ -131,6 +143,8 @@ class GestureEngine:
         if not down:
             if self.state == "drawing":
                 self._finish()
+            elif self.state in ("hold", "armed"):
+                log(f"lifted while {self.state} after {now - self._t0:.2f}s (no drawing)")
             self.state, self.stroke = "idle", []
             return
 
@@ -148,9 +162,11 @@ class GestureEngine:
         elif self.state == "hold":
             if math.dist(p, self._p0) > HOLD_SLOP * aspect:
                 self.state = "cursor"  # normal mouse use; ignore until lift
+                log(f"moved after {now - self._t0:.2f}s -> normal mouse")
             elif now - self._t0 >= HOLD_TIME:
                 self.state, self.stroke = "armed", [p]
                 self._cursor0 = actions.get_cursor()
+                log("armed: draw mode")
         elif self.state == "armed":
             self.stroke.append(p)
             if math.dist(p, self.stroke[0]) > HOLD_SLOP * aspect:
@@ -164,8 +180,12 @@ class GestureEngine:
         span = max(max(x for x, _ in pts) - min(x for x, _ in pts),
                    max(y for _, y in pts) - min(y for _, y in pts)) if pts else 0
         if span < MIN_STROKE:
+            log(f"stroke too small (span {span:.3f}, {len(pts)} pts)")
             return
         name, score = recognise(pts)
+        best = min(((n, sum(math.dist(a, b) for a, b in zip(_normalise(pts), t)) / N_POINTS)
+                    for n, t in _NORMALISED), key=lambda x: x[1])
+        log(f"stroke span {span:.3f}, {len(pts)} pts -> {name} (closest {best[0]} {best[1]:.3f})")
         if name is None:
             self._say("?")
             return
