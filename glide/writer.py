@@ -137,6 +137,36 @@ Rules:
 Reply with ONLY JSON: {{"subject": "...", "body": "..."}}"""
 
 
+POLISH_PROMPT = """Make this short chat message sound natural and complete, in English.
+Message: "{text}"
+Rules:
+- Keep exactly the same meaning: who does what, and when. Keep the same subject ("it" stays
+  "it", "I" stays "I").
+- Do NOT add facts, reasons, times, places, names, greetings, emojis, questions, offers,
+  feelings or extra enthusiasm ("sounds good", "so much").
+- Add at most a few small words so it reads like a normal message (e.g. "I will come" ->
+  "Okay, I'll come.").
+Reply with ONLY JSON: {{"polished": "..."}}"""
+
+POLISHED = "✨ Polished"
+
+
+def polish_message(text):
+    """A slightly fuller, natural version of a WhatsApp message, same meaning. None if not useful."""
+    if len(text.split()) < 3:
+        return None  # "ok", "thanks": too short to polish without inventing meaning
+    try:
+        out = handwriting.ask_json(POLISH_PROMPT.format(text=text)) or {}
+        polished = (out.get("polished") or "").strip()
+    except Exception:
+        actions.log_error("polish")
+        return None
+    plain = lambda t: "".join(ch for ch in t.lower() if ch.isalnum())  # noqa: E731
+    if not polished or plain(polished) == plain(text) or len(polished) > 3 * len(text) + 25:
+        return None  # nothing gained, or it grew too much to trust
+    return polished
+
+
 def tidy_mail(text):
     """(subject, body): the text tidied into an email without adding any content.
     Falls back to the text as written if the AI isn't available."""
@@ -694,7 +724,12 @@ class Writer:
                 result["language"] = "unknown"
         typed = build_choices(result)
         if self.in_whatsapp:
-            # in WhatsApp Web: offer a Sarvam voice note (Malayalam if there is a Malayalam option)
+            # in WhatsApp Web: a polished English version (same meaning, only if it helps), then a
+            # Sarvam voice note (Malayalam if there is a Malayalam option)
+            english = next((t for label, t in typed if label == ENG), None)
+            polished = polish_message(english) if english else None
+            if polished:
+                typed = typed + [(POLISHED, polished)]
             mal = next((t for label, t in typed if label == MAL), None)
             typed = typed + [(VOICE, mal or result["text"])]
         sends, targets = build_sends(typed, result["text"]) if SEND_ROW_ENABLED else ([], {})

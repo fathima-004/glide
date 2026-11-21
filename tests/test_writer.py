@@ -4,11 +4,15 @@ import threading
 import time
 
 threading_Thread = threading.Thread  # the real one, before tests swap in an inline version
+_real_polish = None  # set below, after imports
 
 from PIL import Image
 
 from glide import actions, gestures, handwriting, sarvam, writer
 from tests.test_engine import make_engine, lift
+
+_real_polish = writer.polish_message
+writer.polish_message = lambda text: None  # no network in tests; test_polished_card checks it
 
 
 def two(eng, x=0.5, y=0.5):
@@ -304,6 +308,7 @@ def test_slant_swipes_pick_the_app():
     w, sent = _choosing_writer()
     _swipe(w, 0.3, 0.5, 0.8, 0.52)            # flat swipe: nothing
     assert sent == [] and w.mode == "choosing"
+    writer.SEND_ROW_ENABLED = False           # back to parked for the tests that follow
 
 
 def test_do_it_card_runs_agent():
@@ -320,6 +325,31 @@ def test_do_it_card_runs_agent():
     w.feed([{"id": 0, "x": 0.9, "y": 0.5, "tip": True}], 1.6, time.time())
     w.feed([{"id": 0, "x": 0.9, "y": 0.5, "tip": True}], 1.6, time.time() + writer.DWELL + 0.1)
     assert goals == ["didi varam"] and said == ["done"] and not w.active
+
+
+def test_polished_card():
+    handwriting.ask_json = lambda prompt: {"polished": "Okay, I'll come."}
+    assert _real_polish("I will come") == "Okay, I'll come."
+    assert _real_polish("ok") is None                       # too short to polish safely
+    handwriting.ask_json = lambda prompt: {"polished": "I will come"}
+    assert _real_polish("I will come") is None              # nothing gained
+    handwriting.ask_json = lambda prompt: {"polished": "x " * 60}
+    assert _real_polish("I will come") is None              # grew too much to trust
+    from glide import agent
+    agent.open_chat = lambda contact, status: None
+    writer.in_whatsapp_web = lambda: True
+    writer.threading.Thread = _InlineThread
+    writer.polish_message = lambda text: "Okay, I'll come."
+    sarvam.manglish_to_malayalam = lambda t: "വരാം"
+    sarvam.translate = lambda t, s, d: "I will come"
+    handwriting.recognise = lambda png: {"text": "Baba - varaam", "script": "latin", "language": "manglish"}
+    eng, rec = make_engine({})
+    w = eng.writer
+    w.start((0, 0))
+    w._read([[(0, 0), (1, 1)]])
+    assert [label for label, _ in w.choices] == ["English", writer.MAL, writer.POLISHED, writer.VOICE], w.choices
+    writer.polish_message = lambda text: None
+    writer.in_whatsapp_web = lambda: False
 
 
 def test_hyphen_forms():
@@ -369,3 +399,5 @@ if __name__ == "__main__":
     print("ok slant swipes")
     test_hyphen_forms()
     print("ok hyphen forms")
+    test_polished_card()
+    print("ok polished card")

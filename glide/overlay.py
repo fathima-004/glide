@@ -218,7 +218,8 @@ class Overlay:
         return self.canvas.create_polygon(pts, smooth=True, **kw)
 
     CARD_COLORS = {"As written": "#39f5ff", "English": "#39f5ff", "Translation": "#ff6fd8",
-                   "Or": "#8aa0b4", "\U0001F3A4 Voice note": "#7cff6b", "⚡ Do it": "#ffb84d"}
+                   "Or": "#8aa0b4", "\U0001F3A4 Voice note": "#7cff6b", "⚡ Do it": "#ffb84d",
+                   "✨ Polished": "#c9a7ff"}
 
     def _card_color(self, label):
         if label.startswith("\U0001F4AC"):
@@ -284,6 +285,8 @@ class Overlay:
             if i < wr.n_type and text == wr.written:  # what you wrote, read by Gemma
                 from .handwriting import last_model, model_name
                 badge = "· " + model_name(last_model)
+            elif label == "✨ Polished":  # same meaning, smoother wording, by Gemma
+                badge = "· Gemma"
             elif i < wr.n_type:  # converted by Sarvam AI (Arabic: by Gemma, Sarvam has no Arabic)
                 arabic = any("؀" <= ch <= "ۿ" for ch in wr.written)
                 badge = "· Gemma" if arabic else "· Sarvam AI"

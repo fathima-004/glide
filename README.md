@@ -36,9 +36,13 @@ Built overnight at **HackaThoni 2026** on a houseboat in Alappuzha ·
 | Hold still in a **corner**, then lift | ↖ all windows · ↗ switch app · ↙ desktop · ↘ right-click |
 | Slide along an **edge** | left = volume · right = brightness · top = browser tabs |
 | Hold **two fingers**, write one word at a time, stop 2 s | Typed at the cursor, in the language you pick |
-| …in **WhatsApp Web**: `Baba - varaam` | Opens Baba's chat → sends *"I will come"* / *വരാം* / a **🎤 Malayalam voice note** |
+| …in **WhatsApp Web**: `Baba - varaam` | Opens Baba's chat → sends *"I will come"* / *വരാം* / **✨ "I'll be there."** / a **🎤 Malayalam voice note** |
 | …in **Gmail**: `ammu - report sent` | Mail to **ammu@gmail.com**, subject + wording tidied, nothing invented |
 | **Esc** | Cancel anything, including a send that's counting down |
+
+**✨ Polished** is an optional card: the same message, a little fuller and more natural, with the
+same subject and meaning — no added facts, reasons or feelings, and never offered for one- or
+two-word messages, where polishing would mean guessing.
 
 Every send has a **3-second "touch to cancel" countdown**. A hyphen after the first word picks a
 new person; without it the message continues to the same person.
