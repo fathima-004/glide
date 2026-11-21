@@ -28,7 +28,8 @@ PROMPT = (
     "This image is handwriting drawn with a finger on a laptop touchpad, so it is shaky. "
     "It is a short word or phrase in Malayalam script, Arabic script, or English/Latin letters "
     "(Latin letters may be Manglish, i.e. Malayalam typed in English letters). "
-    "Keep punctuation exactly as written, especially a comma (it may be a small separate stroke). "
+    "Keep punctuation exactly as written, especially a hyphen '-' (a short flat stroke, it may be "
+    "on its own). "
     'Reply with ONLY this JSON, nothing else: {"text": "<exact text written>", '
     '"script": "malayalam" or "arabic" or "latin", '
     '"language": "malayalam" (Malayalam script) or "arabic" (Arabic script) or "english" '

@@ -159,9 +159,9 @@ def test_whatsapp_first_word_is_the_contact():
     # name first, pause, then the message
     opened.clear()
     sent.clear()
-    handwriting.recognise = lambda png: {"text": "didi,", "script": "latin", "language": "english"}
+    handwriting.recognise = lambda png: {"text": "didi -", "script": "latin", "language": "english"}
     w.start((0, 0))
-    w._read([[(0, 0), (1, 1)]])                 # comma: a new person (Rashid was the last one)
+    w._read([[(0, 0), (1, 1)]])                 # hyphen: a new person (Rashid was the last one)
     assert opened == ["Didi Ltst"] and w.mode == "writing" and w.choices == []  # favourite nickname
     handwriting.recognise = lambda png: {"text": "pani kazhinju", "script": "latin", "language": "manglish"}
     w._read([[(0, 0), (1, 1)]])
@@ -187,8 +187,8 @@ def test_comma_means_new_person_otherwise_continue():
     assert opened == ["Baba"] and w.mode == "writing"
     w.tick(time.time() + writer.WAIT_FOR_MESSAGE + 1)
     assert not w.active
-    handwriting.recognise = lambda png: {"text": "Rahul, hello", "script": "latin", "language": "english"}
-    w.start((0, 0))                                      # comma: a new contact
+    handwriting.recognise = lambda png: {"text": "Rahul - hello", "script": "latin", "language": "english"}
+    w.start((0, 0))                                      # hyphen: a new contact
     assert w.wa_contact is None
     w._read([[(0, 0), (1, 1)]])
     assert opened == ["Baba", "Rahul"] and w.wa_contact == "Rahul"
@@ -196,11 +196,11 @@ def test_comma_means_new_person_otherwise_continue():
     w.feed([{"id": 0, "x": 0.1, "y": 0.5, "tip": True}], 1.6, time.time() + writer.DWELL + 0.1)
     assert sent == [("Rahul", "hello")]
     handwriting.recognise = lambda png: {"text": "see you soon", "script": "latin", "language": "english"}
-    w.start((0, 0))                                      # no comma: continue with Rahul
+    w.start((0, 0))                                      # no hyphen: continue with Rahul
     w._read([[(0, 0), (1, 1)]])
     assert w.wa_contact == "Rahul" and w.choices[0] == ("English", "see you soon")
     assert w.preview() == ("Rahul", "", False) or True
-    assert writer.split_recipient("Baba, varaam", "Rahul") == ("Baba", "varaam", True)
+    assert writer.split_recipient("Baba - varaam", "Rahul") == ("Baba", "varaam", True)
     assert writer.split_recipient("varaam", "Rahul") == (None, "varaam", False)
     assert writer.split_recipient("Baba varaam", None) == ("Baba", "varaam", True)  # no one yet
     writer.in_whatsapp_web = lambda: False
@@ -360,3 +360,17 @@ if __name__ == "__main__":
     print("ok esc aborts")
     test_slant_swipes_pick_the_app()
     print("ok slant swipes")
+
+
+def test_hyphen_forms():
+    assert writer.split_recipient("Baba-varaam", None) == ("Baba", "varaam", True)
+    assert writer.split_recipient("ammu - report sent", "rashrahn@gmail.com") == ("ammu", "report sent", True)
+    assert writer.split_recipient("report sent", "rashrahn@gmail.com") == (None, "report sent", False)
+    assert writer.split_recipient("Didi u{2013} hello", "Baba")[0] == "Didi"  # en dash too
+    test_hyphen_forms_ran.append(1)
+
+
+test_hyphen_forms_ran = []
+test_hyphen_forms()
+print("ok hyphen forms")
+

@@ -152,10 +152,10 @@ def tidy_mail(text):
 
 
 def split_recipient(text, last):
-    """(who, message, is_new). 'Baba, varaam' -> new person Baba. Without a comma the whole text is
-    the message for `last`; if there is no last person yet, the first word is the person."""
+    """(who, message, is_new). 'Baba - varaam' -> new person Baba. Without a hyphen after the first
+    word the whole text is the message for `last`; with nobody yet, the first word is the person."""
     import re
-    m = re.match(r"^\s*([^,\u060c\s]+)\s*[,\u060c]\s*(.*)$", text, re.S)  # also the Arabic comma
+    m = re.match(r"^\s*([^\s\-\u2010-\u2015]+)\s*[\-\u2010-\u2015]\s*(.*)$", text, re.S)  # - and dashes
     if m:
         return m.group(1), m.group(2).strip(), True
     if last:
@@ -577,7 +577,7 @@ class Writer:
 
     def preview(self):
         """(who, message, is_new) for the words read so far, for the on-screen hint."""
-        text = " ".join(self.words_so_far).replace(" ,", ",")
+        text = " ".join(self.words_so_far)
         if self.wa_contact or self.mail_to:
             return self.wa_contact or self.mail_to, text, False
         return split_recipient(text, self.last_wa_contact if self.in_whatsapp else self.last_mail_to)
@@ -603,10 +603,11 @@ class Writer:
         if not words:
             self.cancel("Couldn't read that \u2014 try bigger")
             return
-        text = " ".join(j["text"] for j in words).replace(" ,", ",").replace(" \u060c", "\u060c")
+        text = " ".join(j["text"] for j in words)  # a lone "-" word stays: "Baba - varaam"
         last = self.last_wa_contact if self.in_whatsapp else self.last_mail_to
         new = not (self.wa_contact or self.mail_to) and split_recipient(text, last)[2]
-        msg_langs = [j["language"] for j in (words[1:] if new else words) if j["text"] not in (",", "\u060c")]
+        dashes = ("-", "\u2010", "\u2011", "\u2012", "\u2013", "\u2014", "\u2015")
+        msg_langs = [j["language"] for j in (words[1:] if new else words) if j["text"].strip() not in dashes]
         if any("\u0600" <= ch <= "\u06ff" for ch in text):
             lang = "arabic"
         elif "manglish" in msg_langs:

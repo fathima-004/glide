@@ -180,16 +180,16 @@ class Overlay:
             elif wr.wa_contact:
                 title = f"✍ Now write the message for {wr.wa_contact}"
             elif wr.in_whatsapp and wr.last_wa_contact:
-                title = (f"✍ Message for {wr.last_wa_contact} — or  Name,  then the message"
+                title = (f"✍ Message for {wr.last_wa_contact} — or  Name -  then the message"
                          " for someone new")
             elif wr.in_whatsapp:
-                title = "✍ Name,  then the message — one word at a time"
+                title = "✍ Name -  then the message — one word at a time"
             elif wr.mail_to:
                 title = f"✍ Now write the mail for {wr.mail_to}"
             elif wr.in_gmail and wr.last_mail_to:
-                title = f"✍ Mail for {wr.last_mail_to} — or  name,  then the mail for someone new"
+                title = f"✍ Mail for {wr.last_mail_to} — or  name -  then the mail for someone new"
             elif wr.in_gmail:
-                title = "✍ Email name,  then the mail — one word at a time"
+                title = "✍ Email name -  then the mail — one word at a time"
             else:
                 title = "✍ Write a word"
             col = "#7cff6b" if wr.wa_contact else "#ff6fd8" if wr.mail_to else CYAN
