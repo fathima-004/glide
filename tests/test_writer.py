@@ -79,7 +79,7 @@ def test_do_it_card_runs_agent():
     from glide import agent
     eng, rec = make_engine({})
     goals, said = [], []
-    agent.run = lambda goal, status: (goals.append(goal), status("⚡ Thinking"), "done")[2]
+    agent.run = lambda goal, status, **kw: (goals.append(goal), status("⚡ Thinking"), "done")[2]
     w = eng.writer
     w.say = said.append
     writer.threading.Thread = _InlineThread

@@ -65,6 +65,13 @@ VOICE = "\U0001F3A4 Voice note"
 DO_IT = "⚡ Do it"
 
 
+def is_direct_command(text):
+    """Writing that is clearly an instruction skips the cards: 'w-name msg' or 'mail …'."""
+    from .agent import QUICK
+    t = text.strip().lower()
+    return bool(QUICK.match(text)) or t.startswith(("mail ", "email ", "m-"))
+
+
 class Writer:
     def __init__(self, say):
         self.say = say
@@ -116,6 +123,12 @@ class Writer:
             self._last_change = now
         elif self.mode == "choosing":
             self._feed_pick(down, now)
+        elif self.mode == "agent":
+            # a NEW touch (after lifting) cancels a pending send
+            if not down:
+                self._agent_lifted = True
+            elif self._agent_lifted:
+                self._agent_touched = True
 
     def _feed_pick(self, down, now):
         """Finger position picks a card live; staying on it fills a ring; full ring types it."""
@@ -148,8 +161,9 @@ class Writer:
             self.agent_status = text
             actions_log("agent: " + text)
 
+        self._agent_lifted, self._agent_touched = False, False
         try:
-            result = agent.run(goal, status)
+            result = agent.run(goal, status, cancelled=lambda: self._agent_touched)
         except Exception as e:
             print("agent failed:", e)
             result = "Agent failed — try again"
@@ -248,6 +262,11 @@ class Writer:
             result = None
         if not result:
             self.cancel("Couldn't read that — try bigger")
+            return
+        if is_direct_command(result["text"]):  # "w-didi varam", "mail rashid ...": just do it
+            actions_log(f"direct command: {result['text']}")
+            self.mode, self.agent_status = "agent", "⚡ " + result["text"]
+            self._run_agent(result["text"])
             return
         choices = build_choices(result)
         actions_log(f"read {result} -> {choices}")

@@ -1,14 +1,16 @@
 """Glide Agent: write a goal with one finger, and Glide does the multi-step task.
 
-    "didi varam"       -> WhatsApp: open Didi's chat, type "ഞാൻ വരാം", wait for ✓ to send
-    "boat race video"  -> YouTube search for Nehru Trophy boat race
-    "mail sir leave"   -> Gmail draft of a polite leave letter
+    "w-didi varam"            -> WhatsApp Didi "varam" and send (quick syntax, no AI step)
+    "didi varam"              -> WhatsApp Didi "ഞാൻ വരും" (AI plan + Sarvam Malayalam) and send
+    "mail rashid work done"   -> Gmail to Rashid: subject + polite body, and send
+    "boat race video"         -> YouTube search
 
-The plan comes from Gemma (Gemini as the safety net); Malayalam messages are written
-with Sarvam. Messages are never sent by themselves: Glide stops and you draw ✓ to send.
+The plan comes from Gemma (Gemini as the safety net); Malayalam messages are written with
+Sarvam. Before anything is sent there is a 3-second countdown: touch the touchpad to cancel.
 """
 import ctypes
 import os
+import re
 import time
 import urllib.parse
 import webbrowser
@@ -37,23 +39,41 @@ Actions:
 - {{"action": "whatsapp", "contact": "<exact WhatsApp name>", "message_en": "<the message in natural English>", "language": "ml" or "en"}}
   Use "ml" (Malayalam) when the goal is Manglish or the contact is family; otherwise "en".
 - {{"action": "youtube", "query": "<search words>"}}
-- {{"action": "gmail", "to": "<email or empty>", "subject": "<subject>", "body": "<short polite email body>"}}
+- {{"action": "gmail", "to": "<email address if written, else empty>", "to_name": "<person's name, capitalised, e.g. Rashid>", "subject": "<subject>", "body": "<short polite email body, greeting the person by name>"}}
 - {{"action": "search", "query": "<web search words>"}}
 - {{"action": "maps", "query": "<place>"}}
 - {{"action": "none", "reason": "<why>"}}
+
+"mail <name> <what>", "email <name> <what>" and "m-<name> <what>" always mean the gmail action.
 
 Also include "say": a 3-6 word description of what you'll do, e.g. "Message Didi: I'll come".
 
 Examples:
 "didi varam" -> {{"action":"whatsapp","contact":"Didi Ltst","message_en":"I will come","language":"ml","say":"Message Didi: I'll come"}}
 "boat race video" -> {{"action":"youtube","query":"Nehru Trophy boat race","say":"Boat race videos on YouTube"}}
-"mail sir leave" -> {{"action":"gmail","to":"","subject":"Leave request","body":"Dear Sir,\\n\\nI would like to request leave for today as I am unwell.\\n\\nThank you,","say":"Draft leave mail to sir"}}
+"mail rashid work completed" -> {{"action":"gmail","to":"","to_name":"Rashid","subject":"Work completed","body":"Hi Rashid,\\n\\nJust letting you know that the work is completed.\\n\\nThanks,","say":"Mail Rashid: work completed"}}
 
 Goal: "{goal}"
 """
 
 
+QUICK = re.compile(r"^\s*(w|wa|whatsapp)\s*[-:.–—]\s*(\S+)\s+(.+)$", re.I | re.S)
+
+
+def quick_whatsapp(goal):
+    """'w-didi varam' -> straight to WhatsApp, message exactly as written. None if not that form."""
+    m = QUICK.match(goal)
+    if not m:
+        return None
+    nick, msg = m.group(2).strip(), m.group(3).strip()
+    name = contacts().get(nick.lower()) or nick[:1].upper() + nick[1:]
+    return {"action": "whatsapp", "contact": name, "message": msg, "say": f"WhatsApp {name}: {msg}"}
+
+
 def plan(goal):
+    quick = quick_whatsapp(goal)
+    if quick:
+        return quick
     c = contacts()
     p = handwriting.ask_json(PLAN_PROMPT.format(goal=goal, contacts=", ".join(f"{k} -> {v}" for k, v in c.items())))
     return p or {"action": "none", "reason": "couldn't plan"}
@@ -169,11 +189,26 @@ def focus_whatsapp_in_chrome(status):
     return False
 
 
-def _whatsapp(step, status):
+COUNTDOWN = 3  # seconds to cancel (by touching the touchpad) before anything is sent
+
+
+def _countdown(what, status, cancelled):
+    """Show 'Sending … in 3, 2, 1'. Returns False if the user touched the pad to cancel."""
+    for left in range(COUNTDOWN, 0, -1):
+        status(f"⚡ {what} in {left}…  (touch to cancel)")
+        end = time.time() + 1
+        while time.time() < end:
+            if cancelled():
+                return False
+            time.sleep(0.05)
+    return True
+
+
+def _whatsapp(step, status, cancelled):
     contact = step.get("contact") or ""
-    msg = step.get("message_en") or ""
-    if step.get("language") == "ml" and msg:
-        status(f"⚡ Writing it in Malayalam (Sarvam)…")
+    msg = step.get("message") or step.get("message_en") or ""
+    if step.get("language") == "ml" and msg and "message" not in step:
+        status("⚡ Writing it in Malayalam (Sarvam)…")
         msg = sarvam.translate(msg, "en-IN", "ml-IN") or msg
     status("⚡ Opening WhatsApp in Chrome…")
     if not focus_whatsapp_in_chrome(status):
@@ -190,7 +225,47 @@ def _whatsapp(step, status):
     time.sleep(1.0)
     status(f"⚡ Typing to {contact}…")
     actions.type_text(msg)
-    return f"Ready: “{msg}” — draw ✓ to send"
+    if not _countdown(f"Sending to {contact}", status, cancelled):
+        return "Not sent — the message is waiting in the chat"
+    actions.press("enter")
+    return f"✓ Sent to {contact}: “{msg}”"
+
+
+def _wait_for_chrome_title(word, seconds=12):
+    for _ in range(int(seconds / 0.5)):
+        for hwnd, title in _chrome_windows():
+            if word.lower() in title.lower():
+                return hwnd
+        time.sleep(0.5)
+    return None
+
+
+def _gmail(step, status, cancelled):
+    q = urllib.parse.quote
+    to = step.get("to", "") if "@" in step.get("to", "") else ""
+    name = step.get("to_name") or ""
+    url = ("https://mail.google.com/mail/?view=cm&fs=1&to=" + q(to) + "&su=" + q(step.get("subject", "")) +
+           "&body=" + q(step.get("body", "")))
+    status("⚡ Opening your Gmail in Chrome…")
+    open_in_chrome(url)
+    hwnd = _wait_for_chrome_title("Gmail")
+    if not hwnd:
+        return "Gmail didn't open — are you signed in in Chrome?"
+    time.sleep(3.5)                     # let the compose window finish loading
+    _focus(hwnd)
+    if not to:
+        if not name:
+            return "Gmail draft ready — add who it's to"
+        status(f"⚡ Finding {name} in your contacts…")
+        actions.type_text(name)         # the To box has focus in a fresh compose window
+        time.sleep(1.8)                 # Gmail shows matching contacts
+        actions.press("enter")          # pick the top match
+        time.sleep(0.5)
+    who = to or name
+    if not _countdown(f"Sending mail to {who}", status, cancelled):
+        return "Not sent — the mail is waiting as a draft"
+    actions.press("ctrl", "enter")      # Gmail: send
+    return f"✓ Mail sent to {who}: {step.get('subject', '')}"
 
 
 def _open(url, status, what):
@@ -199,8 +274,9 @@ def _open(url, status, what):
     return what
 
 
-def run(goal, status):
-    """Plan and carry out the goal. status(text) shows progress. Returns a final message."""
+def run(goal, status, cancelled=lambda: False):
+    """Plan and carry out the goal. status(text) shows progress; cancelled() is True if the
+    user touched the pad during a countdown. Returns a final message."""
     status("⚡ Thinking…")
     step = plan(goal)
     a = step.get("action")
@@ -209,14 +285,12 @@ def run(goal, status):
         time.sleep(0.6)
     q = urllib.parse.quote_plus
     if a == "whatsapp":
-        return _whatsapp(step, status)
+        return _whatsapp(step, status, cancelled)
     if a == "youtube":
         return _open("https://www.youtube.com/results?search_query=" + q(step.get("query", "")), status,
                      "YouTube: " + step.get("query", ""))
     if a == "gmail":
-        url = ("https://mail.google.com/mail/?view=cm&fs=1&to=" + q(step.get("to", "")) + "&su=" +
-               q(step.get("subject", "")) + "&body=" + q(step.get("body", "")))
-        return _open(url, status, "Gmail draft ready")
+        return _gmail(step, status, cancelled)
     if a == "search":
         return _open("https://www.google.com/search?q=" + q(step.get("query", "")), status,
                      "Searching: " + step.get("query", ""))
