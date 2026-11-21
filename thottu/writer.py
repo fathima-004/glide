@@ -136,6 +136,10 @@ class Writer:
             self.cancel("Cancelled")
 
     def _read(self, strokes):
+        from .keys import get_key
+        if not get_key("GEMINI_API_KEY"):
+            self.cancel("Gemini key not set")
+            return
         try:
             result = handwriting.recognise(handwriting.strokes_to_png(strokes))
         except Exception as e:
