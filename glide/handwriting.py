@@ -29,7 +29,10 @@ PROMPT = (
     "It is a short word or phrase in either Malayalam script or English/Latin letters "
     "(Latin letters may be Manglish, i.e. Malayalam typed in English letters). "
     'Reply with ONLY this JSON, nothing else: {"text": "<exact text written>", '
-    '"script": "malayalam" or "latin", "alternatives": ["<up to 2 other likely readings>"]}'
+    '"script": "malayalam" or "latin", '
+    '"language": "malayalam" (Malayalam script) or "english" (English words) or "manglish" '
+    '(Malayalam words in English letters, e.g. "varam", "pani kazhinju"), '
+    '"alternatives": ["<up to 2 other likely readings>"]}'
 )
 
 
@@ -69,6 +72,10 @@ def _parse(text):
     out = json.loads(m.group(0) if m else text)
     out["text"] = str(out.get("text", "")).strip().strip('"')
     out["script"] = out.get("script") or "latin"
+    if any("ഀ" <= ch <= "ൿ" for ch in out["text"]):
+        out["script"], out["language"] = "malayalam", "malayalam"
+    elif out.get("language") not in ("english", "manglish"):
+        out["language"] = "unknown"  # Latin letters, language unclear: offer both
     out["alternatives"] = [str(a).strip() for a in out.get("alternatives", []) if str(a).strip()]
     return out if out["text"] else None
 

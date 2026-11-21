@@ -229,10 +229,10 @@ class Overlay:
                              outline=col if on else "#2c3a48", width=4 if on else 2)
             tag = cv.create_text(bx + 16, by + 18, anchor="w", text=label, fill=col,
                                  font=("Nirmala UI", 12 if i < wr.n_type else 11, "bold"))
-            if label == "As written":  # read by Gemma (or the Gemini safety net)
+            if i < wr.n_type and text == wr.written:  # what you wrote, read by Gemma
                 from .handwriting import last_model, model_name
                 badge = "· " + model_name(last_model)
-            elif i < wr.n_type and label != "Or":  # top-row conversions come from Sarvam AI
+            elif i < wr.n_type:  # converted by Sarvam AI
                 badge = "· Sarvam AI"
             else:
                 badge = ""
@@ -269,9 +269,11 @@ class Overlay:
                 fx = px + wr.finger_x * pw
                 fy = py + (wr.finger_y or 0.25) * ph
                 cv.create_oval(fx - 7, fy - 7, fx + 7, fy + 7, fill="#ffffff", outline="")
-            hint = "Rest a finger — top half: type it · bottom half: send"
             if rows[1]:
-                hint += "     or swipe   /  mail   ·   \\  WhatsApp"
+                hint = ("Rest a finger — top half: type it · bottom half: send"
+                        "     or swipe   /  mail   ·   \\  WhatsApp")
+            else:
+                hint = "Rest a finger on the touchpad — stay to choose"
             self._pill(ax, py + ph + 26, hint, "#8aa0b4", size=11)
 
     def _tick(self):

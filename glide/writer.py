@@ -1,14 +1,14 @@
-"""Write mode: write a message with your finger, then type it or send it.
+"""Write mode: write with your finger, pick the language, it's typed at the cursor.
 
 Enter: hold TWO fingers still for a moment.
 Write: one finger, as many strokes as you like (lift between letters).
 Read:  about 1 s after your last stroke, Gemma reads it; Sarvam converts it.
-Pick:  two rows of cards appear at the cursor.
-         top row    = what to type: as written · മലയാളം · translation
-         bottom row = send to a favourite (💬 WhatsApp / ✉ mail) · 🎤 voice note · ⚡ do it
-       Rest a finger on the matching part of the touchpad (top/bottom half, left to right)
-       until the ring fills. Or swipe "/" for mail, "\\" for WhatsApp.
-       Do nothing for a few seconds to cancel.
+Pick:  the options appear at the cursor:
+         Malayalam written -> മലയാളം · English
+         English written   -> English
+         Manglish written  -> English · മലയാളം
+       Rest a finger on the matching part of the touchpad (left to right) until the
+       ring fills. Do nothing for a few seconds to cancel.
 """
 import threading
 import time
@@ -23,21 +23,20 @@ SWIPE_TIME = 0.7      # a slant swipe is quick...
 SWIPE_MIN = 0.2       # ...and covers at least this much of the pad both across and down
 AUTO_SPEAK = False    # speak the Malayalam reading as soon as cards appear (parked for now)
 
+# Parked while write mode is kept simple (built step by step with the user); the code stays.
+VOICE_ENABLED = False     # read options aloud, voice-note card
+SEND_ROW_ENABLED = False  # favourites / voice / do-it row, slant swipes
+DIRECT_COMMANDS = False   # "w-name msg" / "mail ..." act straight away
 
-def build_choices(result):
-    """Gemini result -> list of (label, text) choices, de-duplicated."""
-    text, script = result["text"], result.get("script", "latin")
-    jobs = {}
-    if script == "malayalam":
-        jobs["English"] = lambda: sarvam.translate(text, "ml-IN", "en-IN")
-    else:
-        jobs["\u0d2e\u0d32\u0d2f\u0d3e\u0d33\u0d02"] = lambda: sarvam.manglish_to_malayalam(text)
-        jobs["Translation"] = lambda: sarvam.translate(text, "en-IN", "ml-IN")
+MAL, ENG = "മലയാളം", "English"  # card labels: മലയാളം, English
+
+
+def _parallel(jobs):
     found = {}
 
     def run(name, fn):
         try:
-            found[name] = fn()
+            found[name] = (fn() or "").strip()
         except Exception as e:
             print("sarvam job failed:", e)
 
@@ -46,19 +45,38 @@ def build_choices(result):
         t.start()
     for t in threads:
         t.join(9)
+    return found
 
-    choices = [("As written", text)]
-    for name in jobs:
-        if found.get(name):
-            choices.append((name, found[name].strip()))
-    for alt in result.get("alternatives", []):
-        choices.append(("Or", alt))
-    seen, out = set(), []
+
+def build_choices(result):
+    """Gemma's reading -> the language options, as (label, text).
+
+    Malayalam -> മലയാളം (as written) · English (Sarvam translate)
+    English   -> English (as written)
+    Manglish  -> English (Sarvam: Manglish -> Malayalam -> English) · മലയാളം (Sarvam transliterate)
+    Unclear   -> English (as written) · മലയാളം (transliterated)
+    """
+    text, lang = result["text"], result.get("language", "unknown")
+    if lang == "malayalam":
+        found = _parallel({"en": lambda: sarvam.translate(text, "ml-IN", "en-IN")})
+        choices = [(MAL, text), (ENG, found.get("en"))]
+    elif lang == "english":
+        choices = [(ENG, text)]
+    elif lang == "manglish":
+        def meaning():
+            ml = sarvam.manglish_to_malayalam(text)
+            return sarvam.translate(ml, "ml-IN", "en-IN") if ml else None
+        found = _parallel({"en": meaning, "ml": lambda: sarvam.manglish_to_malayalam(text)})
+        choices = [(ENG, found.get("en")), (MAL, found.get("ml"))]
+    else:
+        found = _parallel({"ml": lambda: sarvam.manglish_to_malayalam(text)})
+        choices = [(ENG, text), (MAL, found.get("ml"))]
+    out, seen = [], set()
     for label, t in choices:
         if t and t not in seen:
             seen.add(t)
             out.append((label, t))
-    return out[:3]
+    return out or [(ENG, text)]
 
 
 def build_sends(choices, written):
@@ -164,7 +182,7 @@ class Writer:
         bottom half = bottom row (send to / voice / do it); left-to-right = the cards.
         """
         if not down:
-            if self._swipe and self.finger_x is not None:
+            if SEND_ROW_ENABLED and self._swipe and self.finger_x is not None:
                 sx, sy, st = self._swipe
                 dx, dy = self.finger_x - sx, self.finger_y - sy
                 if now - st <= SWIPE_TIME and abs(dx) >= SWIPE_MIN and abs(dy) >= SWIPE_MIN:
@@ -292,7 +310,7 @@ class Writer:
 
     def _play(self, idx):
         path = self.audio.get(idx)
-        if path:
+        if path and VOICE_ENABLED:
             try:
                 import winsound
                 winsound.PlaySound(path, winsound.SND_FILENAME | winsound.SND_ASYNC)
@@ -354,13 +372,13 @@ class Writer:
         if not result:
             self.cancel("Couldn't read that — try bigger")
             return
-        if is_direct_command(result["text"]):  # "w-didi varam", "mail rashid ...": just do it
+        if DIRECT_COMMANDS and is_direct_command(result["text"]):  # "w-didi ..", "mail ..": do it
             actions_log(f"direct command: {result['text']}")
             self.mode, self.agent_status = "agent", "⚡ " + result["text"]
             self._run_agent(result["text"])
             return
         typed = build_choices(result)
-        sends, targets = build_sends(typed, result["text"])
+        sends, targets = build_sends(typed, result["text"]) if SEND_ROW_ENABLED else ([], {})
         choices = typed + sends
         actions_log(f"read {result} -> {choices}")
         self.audio, self.highlight, self.progress, self.finger_x = {}, None, 0.0, None
@@ -368,7 +386,8 @@ class Writer:
         self.choices = choices
         self.mode, self._last_change, self._pick_p0 = "choosing", time.time(), None
         self.choose_t0 = time.time()
-        threading.Thread(target=self._prefetch_audio, args=(choices,), daemon=True).start()
+        if VOICE_ENABLED:
+            threading.Thread(target=self._prefetch_audio, args=(choices,), daemon=True).start()
 
 
 _CHIME = None

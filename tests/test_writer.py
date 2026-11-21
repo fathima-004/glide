@@ -1,6 +1,9 @@
 ﻿"""Write mode end to end with fake fingers, fake Gemini and fake Sarvam."""
 import io
+import threading
 import time
+
+threading_Thread = threading.Thread  # the real one, before tests swap in an inline version
 
 from PIL import Image
 
@@ -26,9 +29,10 @@ def test_write_mode_flow_manglish():
     eng, rec = make_engine({})
     typed = []
     actions.type_text = typed.append
-    handwriting.recognise = lambda png: {"text": "sari", "script": "latin", "alternatives": []}
+    handwriting.recognise = lambda png: {"text": "shari", "script": "latin", "language": "manglish",
+                                         "alternatives": []}
     sarvam.manglish_to_malayalam = lambda t: "ശരി"   # ശരി
-    sarvam.translate = lambda t, s, d: "ശരി"          # duplicate -> dropped
+    sarvam.translate = lambda t, s, d: "Okay"
     sarvam.speak_to_file = lambda text, path: False
     writer.threading.Thread = _InlineThread
     writer._type_later = lambda text: actions.type_text(text)  # skip the small delay
@@ -46,17 +50,12 @@ def test_write_mode_flow_manglish():
     eng.writer._last_change -= 2    # pretend 2 s passed
     eng.writer.tick(time.time())
     assert eng.writer.mode == "choosing", eng.writer.mode
-    assert eng.writer.choices == [("As written", "sari"),
-                                  ("മലയാളം", "ശരി"),
-                                  ("\U0001F4AC Didi", "ശരി"),
-                                  (writer.VOICE, "ശരി"),
-                                  (writer.DO_IT, "sari")]
-    assert eng.writer.n_type == 2 and eng.writer.targets == {0: ("whatsapp", "Didi Ltst")}
+    # Manglish -> English (meaning) and Malayalam only: no voice, no send row
+    assert eng.writer.choices == [("English", "Okay"), ("മലയാളം", "ശരി")]
+    assert eng.writer.n_type == 2 and eng.writer.targets == {}
 
-    # top half = top row (2 cards), bottom half = bottom row (3 cards)
+    # one row: left half = English, right half = Malayalam (any height)
     one(eng, 0.1, 0.8)
-    assert eng.writer.highlight == 2           # bottom-left: Didi
-    one(eng, 0.1, 0.2)
     assert eng.writer.highlight == 0 and typed == []
     one(eng, 0.8, 0.2)              # slide over: highlight follows, ring restarts
     assert eng.writer.highlight == 1
@@ -102,7 +101,20 @@ def _swipe(w, x0, y0, x1, y1):
     w.feed([], 1.6, t + 0.25)
 
 
+def test_language_options():
+    sarvam.manglish_to_malayalam = lambda t: {"varaam": "വരാം"}.get(t)
+    sarvam.translate = lambda t, s, d: {"വരാം": "I will come",
+                                        "ശരി": "Okay"}.get(t)
+    writer.threading.Thread = threading_Thread
+    assert writer.build_choices({"text": "varaam", "language": "manglish"}) == \
+        [("English", "I will come"), (writer.MAL, "വരാം")]
+    assert writer.build_choices({"text": "good morning", "language": "english"}) == [("English", "good morning")]
+    assert writer.build_choices({"text": "ശരി", "language": "malayalam"}) == \
+        [(writer.MAL, "ശരി"), ("English", "Okay")]
+
+
 def test_slant_swipes_pick_the_app():
+    writer.SEND_ROW_ENABLED = True  # parked feature: still works when switched on
     from glide import contacts
     contacts.people = lambda: {"didi": {"whatsapp": "Didi Ltst", "email": ""},
                                "rashid": {"whatsapp": "", "email": "rashrahn@gmail.com"}}
@@ -153,5 +165,7 @@ if __name__ == "__main__":
     print("ok voice card")
     test_do_it_card_runs_agent()
     print("ok do-it card")
+    test_language_options()
+    print("ok language options")
     test_slant_swipes_pick_the_app()
     print("ok slant swipes")
