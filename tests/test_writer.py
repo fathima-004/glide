@@ -322,6 +322,13 @@ def test_do_it_card_runs_agent():
     assert goals == ["didi varam"] and said == ["done"] and not w.active
 
 
+def test_hyphen_forms():
+    assert writer.split_recipient("Baba-varaam", None) == ("Baba", "varaam", True)
+    assert writer.split_recipient("ammu - report sent", "rashrahn@gmail.com") == ("ammu", "report sent", True)
+    assert writer.split_recipient("report sent", "rashrahn@gmail.com") == (None, "report sent", False)
+    assert writer.split_recipient("Didi – hello", "Baba")[0] == "Didi"  # en dash too
+
+
 class _InlineThread:
     def __init__(self, target, args=(), daemon=None):
         self.target, self.args = target, args
@@ -360,17 +367,5 @@ if __name__ == "__main__":
     print("ok esc aborts")
     test_slant_swipes_pick_the_app()
     print("ok slant swipes")
-
-
-def test_hyphen_forms():
-    assert writer.split_recipient("Baba-varaam", None) == ("Baba", "varaam", True)
-    assert writer.split_recipient("ammu - report sent", "rashrahn@gmail.com") == ("ammu", "report sent", True)
-    assert writer.split_recipient("report sent", "rashrahn@gmail.com") == (None, "report sent", False)
-    assert writer.split_recipient("Didi u{2013} hello", "Baba")[0] == "Didi"  # en dash too
-    test_hyphen_forms_ran.append(1)
-
-
-test_hyphen_forms_ran = []
-test_hyphen_forms()
-print("ok hyphen forms")
-
+    test_hyphen_forms()
+    print("ok hyphen forms")
