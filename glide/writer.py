@@ -197,6 +197,23 @@ def is_direct_command(text):
     return bool(QUICK.match(text)) or t.startswith(("mail ", "email ", "m-"))
 
 
+def _guarded(fn):
+    """Run a background step; on any error, log it and end write mode cleanly."""
+    import functools
+
+    @functools.wraps(fn)
+    def wrapper(self, *args):
+        try:
+            return fn(self, *args)
+        except Exception:
+            actions.log_error(fn.__name__)
+            try:
+                self.cancel("Something went wrong \u2014 try again")
+            except Exception:
+                pass
+    return wrapper
+
+
 class Writer:
     def __init__(self, say):
         self.say = say
@@ -369,6 +386,7 @@ class Writer:
         self.highlight, self._last_change = None, time.time()
         self.say("Pick who — bottom half")
 
+    @_guarded
     def _mail_text(self, to, text):
         """Gmail compose to `to` with the chosen text, tidied into an email (no new content)."""
         from . import agent
@@ -385,6 +403,7 @@ class Writer:
             self._pending = None  # sent: the next writing starts with a name again
         self.cancel(result)
 
+    @_guarded
     def _wa_text(self, contact, text):
         """Text message to the WhatsApp contact; their chat is normally open already."""
         from . import agent
@@ -402,6 +421,7 @@ class Writer:
             self._pending = None  # sent: the next writing starts with a name again
         self.cancel(result)
 
+    @_guarded
     def _wa_voice(self, contact, text):
         """Sarvam voice clip (OGG/Opus, WhatsApp's own format) sent to a WhatsApp contact."""
         import os
@@ -433,6 +453,7 @@ class Writer:
         self.agent_status = text
         actions_log("agent: " + text)
 
+    @_guarded
     def _run_agent(self, goal):
         from . import agent
         self._agent_lifted, self._agent_touched = False, False
@@ -443,6 +464,7 @@ class Writer:
             result = "Agent failed — try again"
         self.cancel(result)
 
+    @_guarded
     def _run_send(self, kind, who, text):
         """One-touch send to a favourite: WhatsApp message or an English email."""
         from . import agent
@@ -482,9 +504,8 @@ class Writer:
             else:
                 self.say("Voice failed")
                 return
-            subprocess.run(["powershell", "-NoProfile", "-Command",
-                            f"Set-Clipboard -LiteralPath '{path}'"],
-                           creationflags=0x08000000, timeout=10)
+            actions.run_hidden(["powershell", "-NoProfile", "-Command",
+                                f"Set-Clipboard -LiteralPath '{path}'"])
             time.sleep(0.15)
             actions.press("ctrl", "v")
             self.say("\U0001F3A4 Voice note ready — draw ✓ to send")
@@ -555,6 +576,7 @@ class Writer:
         elif self.mode == "picked" and now - self._picked_t > 0.85:
             self.cancel()
 
+    @_guarded
     def _read(self, strokes):
         from .keys import get_key
         if not get_key("GEMINI_API_KEY"):
@@ -589,13 +611,15 @@ class Writer:
     def _read_word(self, job, strokes):
         try:
             res = handwriting.recognise(handwriting.strokes_to_png(strokes))
-        except Exception as e:
-            print("handwriting failed:", e)
-            res = None
-        if res:
-            job["text"], job["language"] = res["text"], res.get("language")
-        job["done"] = True
+            if res:
+                job["text"], job["language"] = res["text"], res.get("language")
+            actions_log(f"word read: {job['text']!r}")
+        except Exception:
+            actions.log_error("read word")
+        finally:
+            job["done"] = True  # always, so finishing never waits forever
 
+    @_guarded
     def _finish_words(self):
         """All words read: first = contact / address (unless already chosen), the rest = message."""
         words = [j for j in self.word_jobs if j["text"]]

@@ -14,6 +14,29 @@ VK = {"ctrl": 0x11, "alt": 0x12, "shift": 0x10, "win": 0x5B, "enter": 0x0D,
       "a": 0x41, "esc": 0x1B, "slash": 0xBF}  # "a" with ctrl+shift = Chrome tab search
 
 
+def run_hidden(cmd, capture=False, timeout=10, wait=True):
+    """Start a program with no window. In a windowless .exe the standard handles don't exist,
+    so they must be given explicitly or the program silently fails to start."""
+    kw = dict(stdin=subprocess.DEVNULL, creationflags=0x08000000)
+    if capture:
+        kw.update(stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+    else:
+        kw.update(stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if not wait:
+        return subprocess.Popen(cmd, **kw)
+    return subprocess.run(cmd, timeout=timeout, **kw)
+
+
+def log_error(where):
+    """Write the current exception to %TEMP%\\glide.log (the .exe has no console)."""
+    import traceback
+    try:
+        from .gestures import log
+        log(f"ERROR in {where}: " + traceback.format_exc().replace("\n", " | "))
+    except Exception:
+        pass
+
+
 def press(*keys):
     """Press a chord like press('ctrl', 'c')."""
     codes = [VK[k] for k in keys]
@@ -102,8 +125,7 @@ _NO_WINDOW = 0x08000000
 
 
 def _ps(cmd):
-    return subprocess.run(["powershell", "-NoProfile", "-Command", cmd], capture_output=True,
-                          text=True, creationflags=_NO_WINDOW, timeout=10).stdout.strip()
+    return (run_hidden(["powershell", "-NoProfile", "-Command", cmd], capture=True).stdout or "").strip()
 
 
 def _apply_brightness():

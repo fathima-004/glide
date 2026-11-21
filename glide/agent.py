@@ -157,7 +157,7 @@ def open_in_chrome(url):
     path = chrome_path()
     if path:
         import subprocess
-        subprocess.Popen([path, url])
+        actions.run_hidden([path, url], wait=False)
     else:
         webbrowser.open(url)  # no Chrome installed: default browser
 
@@ -307,8 +307,7 @@ def send_voice_note(contact, path, status, cancelled, chat_open=False):
     if err:
         return err
     status(f"⚡ Attaching voice note for {contact}…")
-    subprocess.run(["powershell", "-NoProfile", "-Command", f"Set-Clipboard -LiteralPath '{path}'"],
-                   creationflags=0x08000000, timeout=10)
+    actions.run_hidden(["powershell", "-NoProfile", "-Command", f"Set-Clipboard -LiteralPath '{path}'"])
     time.sleep(0.2)
     actions.press("ctrl", "v")
     time.sleep(1.8)                        # WhatsApp shows the attachment preview

@@ -205,8 +205,9 @@ class TouchpadReader(threading.Thread):
         if msg == WM_INPUT:
             try:
                 self._handle(lparam)
-            except Exception as e:  # never let a bad report kill the loop
-                print("touchpad parse error:", e)
+            except Exception:  # never let a bad report kill the loop; log it (the .exe has no console)
+                from .actions import log_error
+                log_error("touch frame")
             return user32.DefWindowProcW(hwnd, msg, wparam, lparam)
         if msg == 0x0312:  # WM_HOTKEY
             if wparam == 1:  # Ctrl+Alt+Q quits Glide

@@ -330,7 +330,10 @@ class Overlay:
             self._pill(ax, py + ph + 26, hint, "#8aa0b4", size=11)
 
     def _tick(self):
-        self._draw()
+        try:
+            self._draw()
+        except Exception:  # log it, and keep ticking: one error must never freeze Glide
+            actions.log_error("overlay")
         self.root.after(16, self._tick)
 
     def run(self):

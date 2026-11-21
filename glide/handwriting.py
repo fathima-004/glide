@@ -18,7 +18,7 @@ from PIL import Image, ImageDraw
 from .keys import get_key
 
 # (model, timeout seconds). Gemma first; Gemini Flash-Lite is the fast safety net.
-GEMMA = [("gemma-4-26b-a4b-it", 6), ("gemma-4-31b-it", 6)]
+GEMMA = [("gemma-4-26b-a4b-it", 3.5)]  # one model, short wait: words must read fast
 FALLBACK = [("gemini-flash-lite-latest", 10), ("gemini-3.5-flash-lite", 10)]
 GEMMA_COOLDOWN = 120  # seconds to skip Gemma after it fails
 _gemma_down_until = 0.0
