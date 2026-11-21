@@ -169,6 +169,33 @@ def test_whatsapp_first_word_is_the_contact():
     assert w.choices[0] == ("English", "Work is finished")
 
 
+def test_gmail_first_word_is_the_address():
+    from glide import agent, contacts
+    contacts.email_of = lambda nick: ""
+    writer.in_whatsapp_web = lambda: False
+    writer.in_gmail = lambda: True
+    writer.threading.Thread = _InlineThread
+    sarvam.manglish_to_malayalam = lambda t: "പണി കഴിഞ്ഞു"
+    sarvam.translate = lambda t, s, d: "Work is finished"
+    mails = []
+    agent._gmail = lambda step, status, cancelled: (mails.append(step), "sent")[1]
+    eng, rec = make_engine({})
+    w = eng.writer
+    handwriting.recognise = lambda png: {"text": "rashrahn", "script": "latin", "language": "english"}
+    w.start((0, 0))
+    w._read([[(0, 0), (1, 1)]])             # the address first...
+    assert w.mail_to == "rashrahn@gmail.com" and w.mode == "writing"
+    handwriting.recognise = lambda png: {"text": "pani kazhinju", "script": "latin", "language": "manglish"}
+    w._read([[(0, 0), (1, 1)]])             # ...then the mail
+    assert w.choices == [("English", "Work is finished"),
+                         (writer.MAL, "പണി കഴിഞ്ഞു")]
+    w.feed([{"id": 0, "x": 0.1, "y": 0.5, "tip": True}], 1.6, time.time())
+    w.feed([{"id": 0, "x": 0.1, "y": 0.5, "tip": True}], 1.6, time.time() + writer.DWELL + 0.1)
+    assert mails == [{"action": "gmail", "to": "rashrahn@gmail.com", "to_name": "",
+                      "subject": "Work is finished", "body": "Work is finished"}]
+    writer.in_gmail = lambda: False
+
+
 def test_slant_swipes_pick_the_app():
     writer.SEND_ROW_ENABLED = True  # parked feature: still works when switched on
     from glide import contacts
@@ -227,5 +254,7 @@ if __name__ == "__main__":
     print("ok voice only in whatsapp")
     test_whatsapp_first_word_is_the_contact()
     print("ok first word is the contact")
+    test_gmail_first_word_is_the_address()
+    print("ok gmail first word is the address")
     test_slant_swipes_pick_the_app()
     print("ok slant swipes")

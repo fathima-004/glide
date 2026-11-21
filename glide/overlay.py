@@ -149,9 +149,14 @@ class Overlay:
                 title = f"✍ Now write the message for {wr.wa_contact}"
             elif wr.in_whatsapp:
                 title = "✍ Write the name, then the message"
+            elif wr.mail_to:
+                title = f"✍ Now write the mail for {wr.mail_to}"
+            elif wr.in_gmail:
+                title = "✍ Write the email name, then the mail"
             else:
                 title = "✍ Write a word"
-            self._pill(x0 + bw / 2, y0 - 6, title, "#7cff6b" if wr.wa_contact else CYAN, size=12)
+            col = "#7cff6b" if wr.wa_contact else "#ff6fd8" if wr.mail_to else CYAN
+            self._pill(x0 + bw / 2, y0 - 6, title, col, size=12)
             a = self.engine.aspect or 1.6
             for s in list(wr.strokes):
                 pts = [(x0 + px / a * bw, y0 + py * bh) for px, py in list(s)]
@@ -206,7 +211,8 @@ class Overlay:
             y += ch + row_gap
 
         if wr.header and wr.mode == "choosing":  # e.g. "To: Rashid" when writing in WhatsApp
-            self._pill(ax, top - 30, "\U0001F4AC " + wr.header, "#7cff6b", size=15)
+            icon, col = ("✉ ", "#ff6fd8") if wr.mail_to else ("\U0001F4AC ", "#7cff6b")
+            self._pill(ax, top - 30, icon + wr.header, col, size=15)
         for i, (label, text) in enumerate(wr.choices):
             bx, by0, cw, ch, fsize = pos[i]
             t = min(max((now - wr.choose_t0 - i * 0.06) / 0.28, 0.0), 1.0)  # cards slide up in turn

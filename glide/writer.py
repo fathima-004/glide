@@ -102,8 +102,8 @@ DO_IT = "⚡ Do it"
 SILENT = ("✉", DO_IT)  # cards that aren't read aloud
 
 
-def in_whatsapp_web():
-    """True when the window in front is WhatsApp Web in Chrome."""
+def _chrome_tab_in_front(word):
+    """True when the window in front is Chrome showing a tab whose title contains word."""
     try:
         import ctypes
         from . import agent
@@ -112,10 +112,20 @@ def in_whatsapp_web():
         n = user32.GetWindowTextLengthW(hwnd)
         buf = ctypes.create_unicode_buffer(n + 1)
         user32.GetWindowTextW(hwnd, buf, n + 1)
-        return "whatsapp" in buf.value.lower() and agent._exe_of(hwnd) == "chrome.exe"
+        return word in buf.value.lower() and agent._exe_of(hwnd) == "chrome.exe"
     except Exception as e:
-        print("whatsapp check failed:", e)
+        print("window check failed:", e)
         return False
+
+
+def in_whatsapp_web():
+    """True when the window in front is WhatsApp Web in Chrome."""
+    return _chrome_tab_in_front("whatsapp")
+
+
+def in_gmail():
+    """True when the window in front is Gmail in Chrome."""
+    return _chrome_tab_in_front("gmail")
 
 
 def is_direct_command(text):
@@ -146,6 +156,8 @@ class Writer:
         self.in_whatsapp = False
         self.wa_contact = None    # in WhatsApp: the person named by the first word
         self.chat_open = False    # their chat has been opened already
+        self.in_gmail = False
+        self.mail_to = None       # in Gmail: the address made from the first word
         self.header = ""          # shown above the cards, e.g. "To: Rashid"
         self._swipe = None        # (x, y, time) where the current touch started, for slant swipes
 
@@ -155,7 +167,8 @@ class Writer:
 
     def start(self, anchor):
         self.in_whatsapp = in_whatsapp_web()  # the voice-note option only makes sense there
-        self.wa_contact, self.header, self.chat_open = None, "", False
+        self.in_gmail = not self.in_whatsapp and in_gmail()
+        self.wa_contact, self.header, self.chat_open, self.mail_to = None, "", False, None
         self.mode, self.strokes, self.choices, self.anchor = "writing", [], [], anchor
         self._last_change, self._touching = time.time(), False
         self._await_release = True  # the two fingers that opened write mode are still down
@@ -239,6 +252,9 @@ class Writer:
             elif self.wa_contact and label == VOICE:  # WhatsApp: voice note to the named person
                 self.mode, self.agent_status = "agent", f"\U0001F3A4 Voice note for {self.wa_contact}…"
                 threading.Thread(target=self._wa_voice, args=(self.wa_contact, text), daemon=True).start()
+            elif self.mail_to:                        # Gmail: mail with this text as the content
+                self.mode, self.agent_status = "agent", f"✉ To {self.mail_to}…"
+                threading.Thread(target=self._mail_text, args=(self.mail_to, text), daemon=True).start()
             elif self.wa_contact:                     # WhatsApp: message to the named person
                 self.mode, self.agent_status = "agent", f"⚡ To {self.wa_contact}…"
                 threading.Thread(target=self._wa_text, args=(self.wa_contact, text), daemon=True).start()
@@ -272,6 +288,20 @@ class Writer:
         self.choices = self.choices[:self.n_type] + sends
         self.highlight, self._last_change = None, time.time()
         self.say("Pick who — bottom half")
+
+    def _mail_text(self, to, text):
+        """Gmail compose to `to` with the chosen text as the content; send after the countdown."""
+        from . import agent
+        self._agent_lifted, self._agent_touched = False, False
+        words = text.split()
+        subject = " ".join(words[:6]) + ("…" if len(words) > 6 else "")
+        step = {"action": "gmail", "to": to, "to_name": "", "subject": subject, "body": text}
+        try:
+            result = agent._gmail(step, self._agent_status, lambda: self._agent_touched)
+        except Exception as e:
+            print("mail failed:", e)
+            result = "Couldn't send the mail — try again"
+        self.cancel(result)
 
     def _wa_text(self, contact, text):
         """Text message to the WhatsApp contact; their chat is normally open already."""
@@ -460,6 +490,21 @@ class Writer:
                 return
             self.chat_open = True
             if len(words) < 2:  # only the name so far: now write the message
+                self.mode, self.strokes, self._touching = "writing", [], False
+                self._await_release, self._last_change = False, time.time()
+                return
+            result = dict(result, text=" ".join(words[1:]))
+            if result.get("language") == "malayalam" and not any(
+                    "ഀ" <= ch <= "ൿ" for ch in result["text"]):
+                result["language"] = "unknown"
+        if self.in_gmail and not self.mail_to:
+            # in Gmail: the first word is the address (word -> word@gmail.com), the rest is the mail
+            from . import contacts
+            words = result["text"].split()
+            who = words[0].strip(",.:-")
+            self.mail_to = who if "@" in who else (contacts.email_of(who) or who.lower() + "@gmail.com")
+            self.header = f"To: {self.mail_to}"
+            if len(words) < 2:  # only the address so far: now write the mail
                 self.mode, self.strokes, self._touching = "writing", [], False
                 self._await_release, self._last_change = False, time.time()
                 return
