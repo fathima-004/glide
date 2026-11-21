@@ -16,6 +16,7 @@ IDLE_TO_READ = 1.1     # seconds after last stroke before reading
 NOTHING_WRITTEN = 6.0  # leave write mode if nothing is written
 CHOICE_TIMEOUT = 10.0
 DWELL = 0.8           # seconds on a card to type it
+AUTO_SPEAK = False    # speak the Malayalam reading as soon as cards appear (parked for now)
 
 
 def build_choices(result):
@@ -133,7 +134,6 @@ class Writer:
                 threading.Thread(target=self._send_voice, args=(idx, text), daemon=True).start()
             else:
                 threading.Thread(target=_type_later, args=(text,), daemon=True).start()
-                _chime()
 
     def _send_voice(self, idx, text):
         """Make a Sarvam voice clip and paste it as a file (WhatsApp shows it, ✓ sends)."""
@@ -157,7 +157,6 @@ class Writer:
                            creationflags=0x08000000, timeout=10)
             time.sleep(0.15)
             actions.press("ctrl", "v")
-            _chime()
             self.say("\U0001F3A4 Voice note ready — draw ✓ to send")
         except Exception as e:
             print("voice note failed:", e)
@@ -192,7 +191,7 @@ class Writer:
                     done[text] = self.audio[i] = path
                     if self.highlight == i:
                         self._play(i)  # finger was already waiting on this card
-                    elif self.highlight is None and not spoken and is_mal(text):
+                    elif AUTO_SPEAK and self.highlight is None and not spoken and is_mal(text):
                         self._play(i)  # auto-speak the Malayalam reading
                         spoken = True
             except Exception as e:

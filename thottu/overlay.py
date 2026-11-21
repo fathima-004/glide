@@ -124,11 +124,9 @@ class Overlay:
         x0 = min(max(ax - bw // 2, 20), self.sw - bw - 20)
         y0 = ay - bh - 70 if ay - bh - 70 > 20 else ay + 50
         if wr.mode in ("writing", "reading"):
-            cv.create_rectangle(x0, y0, x0 + bw, y0 + bh, fill="#0b1118", outline=CYAN, width=3)
-            title = "✍ WRITE A WORD  (Malayalam or English)" if wr.mode == "writing" \
-                else "Reading…"
-            cv.create_text(x0 + 14, y0 + 12, anchor="nw", text=title, fill=CYAN,
-                           font=("Segoe UI Semibold", 13))
+            # no board: the ink is written straight over the screen, with a small hint above it
+            title = "✍ Write a word" if wr.mode == "writing" else "Reading…"
+            self._pill(x0 + bw / 2, y0 - 6, title, CYAN, size=12)
             a = self.engine.aspect or 1.6
             for s in list(wr.strokes):
                 pts = [(x0 + px / a * bw, y0 + py * bh) for px, py in list(s)]
@@ -184,10 +182,6 @@ class Overlay:
                         cv.create_text(tx, ty, text=text, fill=_dim(col, 0.5 - k * 0.08),
                                        font=("Nirmala UI", max(size - k, 10), "bold"))
                     cv.create_text(fx, fy, text=text, fill="#ffffff", font=("Nirmala UI", size, "bold"))
-                else:
-                    r = 18 + 40 * min((now - wr._picked_t - 0.45) / 0.25, 1.0)  # landing ripple
-                    cv.create_oval(ax - r, ay - r, ax + r, ay + r, outline="#7cff6b", width=3)
-                    cv.create_text(ax, ay - 40, text="✓", fill="#7cff6b", font=("Segoe UI Black", 26))
                 continue
             grow = 10 if (on or picked) else 0
             if on or picked:  # glow
