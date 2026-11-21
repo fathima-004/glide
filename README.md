@@ -21,6 +21,7 @@ python -m glide --debug          # print raw finger data
 
 - **Ctrl + Alt + T** turns Glide on / off (also from the tray icon near the clock)
 - **Ctrl + Alt + Q** quits
+- `python -m glide.cheatsheet` opens a one-page gesture cheat sheet (Esc or click closes it)
 
 For three-finger drag, set Windows **Settings → Bluetooth & devices → Touchpad →
 Three-finger gestures → Swipes** to **Nothing**.
