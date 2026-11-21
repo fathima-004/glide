@@ -32,6 +32,8 @@ def test_write_mode_flow_manglish():
     sarvam.speak_to_file = lambda text, path: False
     writer.threading.Thread = _InlineThread
     writer._type_later = lambda text: actions.type_text(text)  # skip the small delay
+    from glide import contacts
+    contacts.send_targets = lambda limit=3: [("\U0001F4AC Didi", "whatsapp", "Didi Ltst")]
 
     two(eng)
     time.sleep(gestures.WRITE_HOLD + 0.05)
@@ -46,16 +48,20 @@ def test_write_mode_flow_manglish():
     assert eng.writer.mode == "choosing", eng.writer.mode
     assert eng.writer.choices == [("As written", "sari"),
                                   ("മലയാളം", "ശരി"),
+                                  ("\U0001F4AC Didi", "ശരി"),
                                   (writer.VOICE, "ശരി"),
                                   (writer.DO_IT, "sari")]
+    assert eng.writer.n_type == 2 and eng.writer.targets == {0: ("whatsapp", "Didi Ltst")}
 
-    # 4 cards: each owns a quarter of the pad. Rest on the second until the ring fills.
-    one(eng, 0.1, 0.5)
+    # top half = top row (2 cards), bottom half = bottom row (3 cards)
+    one(eng, 0.1, 0.8)
+    assert eng.writer.highlight == 2           # bottom-left: Didi
+    one(eng, 0.1, 0.2)
     assert eng.writer.highlight == 0 and typed == []
-    one(eng, 0.35, 0.5)              # slide over: highlight follows, ring restarts
+    one(eng, 0.8, 0.2)              # slide over: highlight follows, ring restarts
     assert eng.writer.highlight == 1
     time.sleep(writer.DWELL + 0.05)
-    one(eng, 0.35, 0.5)
+    one(eng, 0.8, 0.2)
     assert typed == ["ശരി"] and eng.writer.mode == "picked"
     eng.writer.tick(time.time() + 1)
     assert not eng.writer.active
@@ -73,6 +79,42 @@ def test_voice_card_sends_voice_note():
     w.feed([{"id": 0, "x": 0.9, "y": 0.5, "tip": True}], 1.6, time.time())
     w.feed([{"id": 0, "x": 0.9, "y": 0.5, "tip": True}], 1.6, time.time() + writer.DWELL + 0.1)
     assert sent == ["ശരി"]
+
+
+def _choosing_writer():
+    eng, rec = make_engine({})
+    w = eng.writer
+    writer.threading.Thread = _InlineThread
+    w.mode, w.anchor, w.choose_t0, w._last_change = "choosing", (0, 0), time.time(), time.time()
+    w.choices = [("As written", "varam"), ("മലയാളം", "വരാം"),
+                 ("\U0001F4AC Didi", "വരാം"), (writer.VOICE, "x"), (writer.DO_IT, "varam")]
+    w.n_type, w.targets, w.written = 2, {0: ("whatsapp", "Didi Ltst")}, "varam"
+    sent = []
+    w._run_send = lambda kind, who, text: sent.append((kind, who, text))
+    return w, sent
+
+
+def _swipe(w, x0, y0, x1, y1):
+    t = time.time()
+    for k in range(6):
+        f = k / 5
+        w.feed([{"id": 0, "x": x0 + (x1 - x0) * f, "y": y0 + (y1 - y0) * f, "tip": True}], 1.6, t + k * 0.04)
+    w.feed([], 1.6, t + 0.25)
+
+
+def test_slant_swipes_pick_the_app():
+    from glide import contacts
+    contacts.people = lambda: {"didi": {"whatsapp": "Didi Ltst", "email": ""},
+                               "rashid": {"whatsapp": "", "email": "rashrahn@gmail.com"}}
+    w, sent = _choosing_writer()
+    _swipe(w, 0.3, 0.8, 0.7, 0.3)             # "/" drawn upwards -> mail
+    assert sent == [("mail", "rashrahn@gmail.com", "English email")]
+    w, sent = _choosing_writer()
+    _swipe(w, 0.3, 0.2, 0.7, 0.8)             # "\" -> WhatsApp, Malayalam version
+    assert sent == [("whatsapp", "Didi Ltst", "വരാം")]
+    w, sent = _choosing_writer()
+    _swipe(w, 0.3, 0.5, 0.8, 0.52)            # flat swipe: nothing
+    assert sent == [] and w.mode == "choosing"
 
 
 def test_do_it_card_runs_agent():
@@ -111,3 +153,5 @@ if __name__ == "__main__":
     print("ok voice card")
     test_do_it_card_runs_agent()
     print("ok do-it card")
+    test_slant_swipes_pick_the_app()
+    print("ok slant swipes")

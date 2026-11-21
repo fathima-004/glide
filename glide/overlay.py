@@ -171,90 +171,108 @@ class Overlay:
     CARD_COLORS = {"As written": "#39f5ff", "English": "#39f5ff", "Translation": "#ff6fd8",
                    "Or": "#8aa0b4", "\U0001F3A4 Voice note": "#7cff6b", "⚡ Do it": "#ffb84d"}
 
+    def _card_color(self, label):
+        if label.startswith("\U0001F4AC"):
+            return "#7cff6b"   # WhatsApp person
+        if label.startswith("✉"):
+            return "#ff6fd8"   # mail person
+        return self.CARD_COLORS.get(label, GOLD)
+
     def _draw_cards(self, wr, ax, ay, now):
+        """Two rows: top = what to type, bottom = send to / voice / do it."""
         cv = self.canvas
-        n = max(len(wr.choices), 1)
-        gap, cw, ch = 22, 260, 150
-        total = n * cw + (n - 1) * gap
-        sx = min(max(ax - total // 2, 20), self.sw - total - 20)
-        top = ay - ch - 120 if ay - ch - 120 > 30 else ay + 60
+        rows = [list(range(0, wr.n_type)), list(range(wr.n_type, len(wr.choices)))]
+        sizes = [(250, 132, 30), (210, 104, 20)]  # card w, h, word font size
+        gap, row_gap = 18, 22
+        block_h = sizes[0][1] + (row_gap + sizes[1][1] if rows[1] else 0)
+        top = ay - block_h - 150 if ay - block_h - 150 > 30 else ay + 60
+        pos = {}
+        y = top
+        for r, idxs in enumerate(rows):
+            if not idxs:
+                continue
+            cw, ch, _ = sizes[r]
+            total = len(idxs) * cw + (len(idxs) - 1) * gap
+            sx = min(max(ax - total // 2, 20), self.sw - total - 20)
+            for k, i in enumerate(idxs):
+                pos[i] = (sx + k * (cw + gap), y, cw, ch, sizes[r][2])
+            y += ch + row_gap
+
         for i, (label, text) in enumerate(wr.choices):
-            # cards slide up one after another
-            t = min(max((now - wr.choose_t0 - i * 0.08) / 0.28, 0.0), 1.0)
-            e = 1 - (1 - t) ** 3
-            bx = sx + i * (cw + gap)
-            by = top + (1 - e) * 50
-            col = self.CARD_COLORS.get(label, GOLD)
+            bx, by0, cw, ch, fsize = pos[i]
+            t = min(max((now - wr.choose_t0 - i * 0.06) / 0.28, 0.0), 1.0)  # cards slide up in turn
+            by = by0 + (1 - (1 - (1 - t) ** 3)) * 50
+            col = self._card_color(label)
             on = wr.highlight == i
             picked = wr.mode == "picked" and wr.picked == i
             if wr.mode == "picked" and not picked:
                 continue  # only the chosen card stays
             if picked:
-                # the chosen word flies from its card down to the cursor and lands
+                # the chosen word flies from its card down to the cursor
                 p = min((now - wr._picked_t) / 0.45, 1.0)
                 e2 = p * p * (3 - 2 * p)
                 ccx, ccy = bx + cw / 2, by + ch / 2
-                fx, fy = ccx + (ax - ccx) * e2, ccy + (ay - ccy) * e2
-                size = int(34 - 16 * e2)
                 if p < 1:
                     for k in range(1, 6):  # comet tail
                         q = max(e2 - k * 0.06, 0)
-                        tx, ty = ccx + (ax - ccx) * q, ccy + (ay - ccy) * q
-                        cv.create_text(tx, ty, text=text, fill=_dim(col, 0.5 - k * 0.08),
-                                       font=("Nirmala UI", max(size - k, 10), "bold"))
-                    cv.create_text(fx, fy, text=text, fill="#ffffff", font=("Nirmala UI", size, "bold"))
+                        cv.create_text(ccx + (ax - ccx) * q, ccy + (ay - ccy) * q, text=text,
+                                       fill=_dim(col, 0.5 - k * 0.08),
+                                       font=("Nirmala UI", max(int(34 - 16 * e2) - k, 10), "bold"))
+                    cv.create_text(ccx + (ax - ccx) * e2, ccy + (ay - ccy) * e2, text=text, fill="#ffffff",
+                                   font=("Nirmala UI", int(34 - 16 * e2), "bold"))
                 continue
-            grow = 10 if (on or picked) else 0
-            if on or picked:  # glow
+            grow = 8 if on else 0
+            if on:  # glow
                 self._round_rect(bx - grow - 8, by - grow - 8, bx + cw + grow + 8, by + ch + grow + 8,
-                                 26, fill=_dim(col, 0.25), outline="")
-            self._round_rect(bx - grow, by - grow, bx + cw + grow, by + ch + grow, 22,
-                             fill="#12301a" if picked else "#0b1118",
-                             outline="#7cff6b" if picked else (col if on else "#2c3a48"),
-                             width=4 if (on or picked) else 2)
-            # tag
-            tag = cv.create_text(bx + 18, by + 20, anchor="w", text=label, fill=col,
-                                 font=("Nirmala UI", 12, "bold"))
+                                 24, fill=_dim(col, 0.25), outline="")
+            self._round_rect(bx - grow, by - grow, bx + cw + grow, by + ch + grow, 20, fill="#0b1118",
+                             outline=col if on else "#2c3a48", width=4 if on else 2)
+            tag = cv.create_text(bx + 16, by + 18, anchor="w", text=label, fill=col,
+                                 font=("Nirmala UI", 12 if i < wr.n_type else 11, "bold"))
             if label == "As written":  # read by Gemma (or the Gemini safety net)
                 from .handwriting import last_model, model_name
                 badge = "· " + model_name(last_model)
-            elif label != "Or":        # these cards come from Sarvam AI
+            elif i < wr.n_type and label != "Or" or label == "\U0001F3A4 Voice note":
                 badge = "· Sarvam AI"
             else:
                 badge = ""
             if badge:
-                cv.create_text(cv.bbox(tag)[2] + 8, by + 21, anchor="w", text=badge,
+                cv.create_text(cv.bbox(tag)[2] + 8, by + 19, anchor="w", text=badge,
                                fill="#8aa0b4", font=("Segoe UI", 9))
-            # the word
             cv.create_text(bx + cw / 2, by + ch / 2 + 10, text=text, fill="#ffffff",
-                           font=("Nirmala UI", 30 if len(text) < 10 else 20, "bold"), width=cw - 24)
-            # speaker icon when audio is ready
+                           font=("Nirmala UI", fsize if len(text) < 10 else max(fsize - 10, 14), "bold"),
+                           width=cw - 20)
             if i in wr.audio:
-                cv.create_text(bx + cw - 20, by + 20, text="\U0001F50A", fill=col, font=("Segoe UI Emoji", 12))
-            # dwell ring
-            if on and wr.mode == "choosing":
-                rx, ry, r = bx + cw / 2, by + ch + grow + 26, 14
+                cv.create_text(bx + cw - 18, by + 18, text="\U0001F50A", fill=col, font=("Segoe UI Emoji", 11))
+            if on and wr.mode == "choosing":  # dwell ring
+                rx, ry, r = bx + cw - 22, by + ch - 22, 11
                 cv.create_oval(rx - r, ry - r, rx + r, ry + r, outline="#2c3a48", width=4)
                 cv.create_arc(rx - r, ry - r, rx + r, ry + r, start=90, extent=-359.9 * wr.progress,
                               style="arc", outline=col, width=4)
-            if picked:
-                cv.create_text(bx + cw / 2, by + ch + 34, text="✓ Typed", fill="#7cff6b",
-                               font=("Segoe UI Black", 18))
 
         if wr.mode == "choosing":
-            # mini touchpad strip: shows which part of the pad picks which card
-            py = top + ch + 70
-            cv.create_text(sx + total / 2, py - 4, text="Rest your finger on the touchpad — stay to choose",
-                           fill="#8aa0b4", font=("Segoe UI", 11))
-            sy = py + 12
-            for i in range(n):
-                x0 = sx + i * total / n
-                col = self.CARD_COLORS.get(wr.choices[i][0], GOLD)
-                cv.create_rectangle(x0 + 2, sy, x0 + total / n - 2, sy + 14,
-                                    fill=_dim(col, 0.6 if wr.highlight == i else 0.2), outline="")
+            # mini touchpad: top half = top row, bottom half = bottom row, plus the finger dot
+            pw, ph = 200, 70 if rows[1] else 36
+            px = ax - pw / 2
+            py = y + 6
+            self._round_rect(px - 4, py - 4, px + pw + 4, py + ph + 4, 10, fill="#0b1118", outline="#2c3a48")
+            for r, idxs in enumerate(rows):
+                if not idxs:
+                    continue
+                rh = ph / (2 if rows[1] else 1)
+                ry0 = py + r * rh
+                for k, i in enumerate(idxs):
+                    x0 = px + k * pw / len(idxs)
+                    cv.create_rectangle(x0 + 2, ry0 + 2, x0 + pw / len(idxs) - 2, ry0 + rh - 2, outline="",
+                                        fill=_dim(self._card_color(wr.choices[i][0]), 0.65 if wr.highlight == i else 0.18))
             if wr.finger_x is not None:
-                fx = sx + wr.finger_x * total
-                cv.create_oval(fx - 9, sy - 2, fx + 9, sy + 16, fill="#ffffff", outline="")
+                fx = px + wr.finger_x * pw
+                fy = py + (wr.finger_y or 0.25) * ph
+                cv.create_oval(fx - 7, fy - 7, fx + 7, fy + 7, fill="#ffffff", outline="")
+            hint = "Rest a finger — top half: type it · bottom half: send"
+            if rows[1]:
+                hint += "      swipe  /  mail   ·   \\  WhatsApp"
+            cv.create_text(ax, py + ph + 22, text=hint, fill="#8aa0b4", font=("Segoe UI", 11))
 
     def _tick(self):
         self._draw()

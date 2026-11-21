@@ -1,10 +1,13 @@
-"""Write mode: write a word with your finger, pick how it gets typed.
+"""Write mode: write a message with your finger, then type it or send it.
 
 Enter: hold TWO fingers still for a moment.
 Write: one finger, as many strokes as you like (lift between letters).
-Read:  about 1 s after your last stroke, Gemini reads it; Sarvam converts it.
-Pick:  up to 3 choices appear at the cursor, left to right. Hold one finger still
-       on the left / middle / right of the touchpad, then lift, to type that choice.
+Read:  about 1 s after your last stroke, Gemma reads it; Sarvam converts it.
+Pick:  two rows of cards appear at the cursor.
+         top row    = what to type: as written · മലയാളം · translation
+         bottom row = send to a favourite (💬 WhatsApp / ✉ mail) · 🎤 voice note · ⚡ do it
+       Rest a finger on the matching part of the touchpad (top/bottom half, left to right)
+       until the ring fills. Or swipe "/" for mail, "\\" for WhatsApp.
        Do nothing for a few seconds to cancel.
 """
 import threading
@@ -16,6 +19,8 @@ IDLE_TO_READ = 1.1     # seconds after last stroke before reading
 NOTHING_WRITTEN = 6.0  # leave write mode if nothing is written
 CHOICE_TIMEOUT = 10.0
 DWELL = 0.8           # seconds on a card to type it
+SWIPE_TIME = 0.7      # a slant swipe is quick...
+SWIPE_MIN = 0.2       # ...and covers at least this much of the pad both across and down
 AUTO_SPEAK = False    # speak the Malayalam reading as soon as cards appear (parked for now)
 
 
@@ -53,16 +58,30 @@ def build_choices(result):
         if t and t not in seen:
             seen.add(t)
             out.append((label, t))
-    out = out[:3]
-    # voice-note card: speak the Malayalam version if we have one, else the text as written
-    mal = next((t for _, t in out if any("ഀ" <= ch <= "ൿ" for ch in t)), None)
-    out.append((VOICE, mal or text))
-    out.append((DO_IT, text))  # Glide Agent: treat what was written as a goal
-    return out
+    return out[:3]
+
+
+def build_sends(choices, written):
+    """Bottom row: one-touch 'send to' cards for favourite people, then voice note and Do it.
+
+    Returns (cards, targets): cards are (label, text shown) and targets maps a card's position
+    in the row to (kind, target). WhatsApp sends the Malayalam version when there is one;
+    mail sends a proper English email made from what was written.
+    """
+    from . import contacts
+    mal = next((t for _, t in choices if any("ഀ" <= ch <= "ൿ" for ch in t)), None)
+    cards, targets = [], {}
+    for label, kind, target in contacts.send_targets():
+        targets[len(cards)] = (kind, target)
+        cards.append((label, (mal or written) if kind == "whatsapp" else "English email"))
+    cards.append((VOICE, mal or written))
+    cards.append((DO_IT, written))  # Glide Agent: treat what was written as a goal
+    return cards, targets
 
 
 VOICE = "\U0001F3A4 Voice note"
 DO_IT = "⚡ Do it"
+SILENT = ("✉", DO_IT)  # cards that aren't read aloud
 
 
 def is_direct_command(text):
@@ -86,6 +105,11 @@ class Writer:
         self.progress, self.finger_x, self.picked, self._picked_t = 0.0, None, None, 0.0
         self.audio, self.choose_t0 = {}, 0.0
         self.agent_status = ""
+        self.n_type = 0           # cards in the top row; the rest are the bottom (send) row
+        self.targets = {}         # bottom-row position -> (kind, target) for favourite people
+        self.written = ""
+        self.finger_y = None
+        self._swipe = None        # (x, y, time) where the current touch started, for slant swipes
 
     @property
     def active(self):
@@ -130,15 +154,36 @@ class Writer:
             elif self._agent_lifted:
                 self._agent_touched = True
 
+    def row_of(self, idx):
+        return 0 if idx < self.n_type else 1
+
     def _feed_pick(self, down, now):
-        """Finger position picks a card live; staying on it fills a ring; full ring types it."""
+        """Finger position picks a card live; staying on it fills a ring; full ring does it.
+
+        The touchpad is split like the cards: top half = top row (what to type),
+        bottom half = bottom row (send to / voice / do it); left-to-right = the cards.
+        """
         if not down:
-            self.finger_x, self.highlight, self.progress, self._pick_p0 = None, None, 0.0, None
+            if self._swipe and self.finger_x is not None:
+                sx, sy, st = self._swipe
+                dx, dy = self.finger_x - sx, self.finger_y - sy
+                if now - st <= SWIPE_TIME and abs(dx) >= SWIPE_MIN and abs(dy) >= SWIPE_MIN:
+                    # y grows downwards: "/" has dx and dy of opposite sign, "\" the same sign
+                    self._swipe = None
+                    self._slant("mail" if (dx > 0) != (dy > 0) else "whatsapp")
+                    return
+            self._swipe = None
+            self.finger_x, self.finger_y, self.highlight, self.progress, self._pick_p0 = \
+                None, None, None, 0.0, None
             return
-        x = down[0]["x"]
-        self.finger_x, self._pick_p0 = x, x
-        n = len(self.choices)
-        idx = min(int(x * n), n - 1)
+        x, y = down[0]["x"], down[0]["y"]
+        if self._swipe is None:
+            self._swipe = (x, y, now)
+        self.finger_x, self.finger_y, self._pick_p0 = x, y, x
+        n_send = len(self.choices) - self.n_type
+        bottom = n_send > 0 and (y >= 0.5 or self.n_type == 0)
+        start, n = (self.n_type, n_send) if bottom else (0, self.n_type)
+        idx = start + min(int(x * n), n - 1)
         if idx != self.highlight:
             self.highlight, self._pick_t0 = idx, now
             self._play(idx)
@@ -146,7 +191,12 @@ class Writer:
         if self.progress >= 1.0:
             label, text = self.choices[idx]
             self.mode, self.picked, self._picked_t = "picked", idx, now
-            if label == VOICE:
+            target = self.targets.get(idx - self.n_type) if bottom else None
+            if target:
+                kind, who = target
+                self.mode, self.agent_status = "agent", f"⚡ {label}…"
+                threading.Thread(target=self._run_send, args=(kind, who, text), daemon=True).start()
+            elif label == VOICE:
                 threading.Thread(target=self._send_voice, args=(idx, text), daemon=True).start()
             elif label == DO_IT:
                 self.mode, self.agent_status = "agent", "⚡ Thinking…"
@@ -154,19 +204,58 @@ class Writer:
             else:
                 threading.Thread(target=_type_later, args=(text,), daemon=True).start()
 
+    def _slant(self, kind):
+        """'/' = mail, '\\' = WhatsApp: send to the only such favourite, or show just those people."""
+        from . import contacts
+        field = "email" if kind == "mail" else "whatsapp"
+        people = [(nick, p[field]) for nick, p in contacts.people().items() if p[field]]
+        actions_log(f"slant -> {kind}: {people}")
+        if not people:
+            self.say("No " + ("email" if kind == "mail" else "WhatsApp") + " favourite — add one in Favourites")
+            return
+        mal = next((t for _, t in self.choices[:self.n_type] if any("ഀ" <= ch <= "ൿ" for ch in t)), None)
+        text = (mal or self.written) if kind == "whatsapp" else "English email"
+        if len(people) == 1:
+            nick, target = people[0]
+            self.mode, self.agent_status = "agent", f"⚡ {nick[:1].upper() + nick[1:]}…"
+            threading.Thread(target=self._run_send, args=(kind, target, text), daemon=True).start()
+            return
+        icon = "✉" if kind == "mail" else "\U0001F4AC"
+        sends = [(f"{icon} {nick[:1].upper() + nick[1:]}", text) for nick, _ in people[:5]]
+        self.targets = {i: (kind, target) for i, (_, target) in enumerate(people[:5])}
+        self.choices = self.choices[:self.n_type] + sends
+        self.highlight, self._last_change = None, time.time()
+        self.say("Pick who — bottom half")
+
+    def _agent_status(self, text):
+        self.agent_status = text
+        actions_log("agent: " + text)
+
     def _run_agent(self, goal):
         from . import agent
-
-        def status(text):
-            self.agent_status = text
-            actions_log("agent: " + text)
-
         self._agent_lifted, self._agent_touched = False, False
         try:
-            result = agent.run(goal, status, cancelled=lambda: self._agent_touched)
+            result = agent.run(goal, self._agent_status, cancelled=lambda: self._agent_touched)
         except Exception as e:
             print("agent failed:", e)
             result = "Agent failed — try again"
+        self.cancel(result)
+
+    def _run_send(self, kind, who, text):
+        """One-touch send to a favourite: WhatsApp message or an English email."""
+        from . import agent
+        self._agent_lifted, self._agent_touched = False, False
+        cancelled = lambda: self._agent_touched  # noqa: E731
+        try:
+            if kind == "whatsapp":
+                result = agent._whatsapp({"contact": who, "message": text}, self._agent_status, cancelled)
+            else:
+                self._agent_status("⚡ Writing the email…")
+                step = agent.quick_mail(f"mail {who} {self.written}")
+                result = agent._gmail(step, self._agent_status, cancelled)
+        except Exception as e:
+            print("send failed:", e)
+            result = "Couldn't send — try again"
         self.cancel(result)
 
     def _send_voice(self, idx, text):
@@ -221,6 +310,8 @@ class Writer:
             text = choices[i][1]
             if self.choices is not choices:
                 return  # a new word was written meanwhile
+            if choices[i][0].startswith(SILENT):
+                continue
             try:
                 if text in done:
                     self.audio[i] = done[text]
@@ -268,9 +359,12 @@ class Writer:
             self.mode, self.agent_status = "agent", "⚡ " + result["text"]
             self._run_agent(result["text"])
             return
-        choices = build_choices(result)
+        typed = build_choices(result)
+        sends, targets = build_sends(typed, result["text"])
+        choices = typed + sends
         actions_log(f"read {result} -> {choices}")
         self.audio, self.highlight, self.progress, self.finger_x = {}, None, 0.0, None
+        self.n_type, self.targets, self.written = len(typed), targets, result["text"]
         self.choices = choices
         self.mode, self._last_change, self._pick_p0 = "choosing", time.time(), None
         self.choose_t0 = time.time()

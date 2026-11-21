@@ -100,7 +100,8 @@ def quick_mail(goal):
     if not m:
         return None
     who, what = m.group(2).strip().strip(",.:"), m.group(3).strip()
-    to = who if "@" in who else who.lower() + "@gmail.com"
+    from . import contacts as store
+    to = who if "@" in who else (store.email_of(who) or who.lower() + "@gmail.com")
     is_mal_script = any("ഀ" <= ch <= "ൿ" for ch in what)
     meaning = manglish_meaning(what, is_mal_script) or what
     written = handwriting.ask_json(MAIL_PROMPT.format(what=what, meaning=meaning)) or {}
