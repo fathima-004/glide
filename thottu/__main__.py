@@ -18,7 +18,7 @@ class State:
 
     def toggle(self):
         self.enabled = not self.enabled
-        if self.engine.state == "drag":  # never leave the mouse button stuck down
+        if self.engine.state in ("drag", "drag_lifted"):  # never leave the button stuck down
             from . import actions
             actions.mouse_up()
         self.engine.state, self.engine.stroke = "idle", []

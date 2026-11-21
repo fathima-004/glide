@@ -47,11 +47,13 @@ def mouse_up():
 
 
 def move_by(dx, dy):
-    """Move the cursor by whole pixels, clamped to the screen."""
+    """Move the cursor by whole pixels as real mouse input (so drags register everywhere)."""
     x, y = get_cursor()
     w, h = screen_size()
-    user32.SetCursorPos(min(max(int(round(x + dx)), 0), w - 1),
-                        min(max(int(round(y + dy)), 0), h - 1))
+    nx = min(max(int(round(x + dx)), 0), w - 1)
+    ny = min(max(int(round(y + dy)), 0), h - 1)
+    MOVE_ABSOLUTE = 0x0001 | 0x8000
+    user32.mouse_event(MOVE_ABSOLUTE, int(nx * 65535 / (w - 1)), int(ny * 65535 / (h - 1)), 0, 0)
 
 
 class _KEYBDINPUT(ctypes.Structure):

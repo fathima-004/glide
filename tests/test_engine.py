@@ -78,6 +78,34 @@ def test_top_edge_slide_right_is_next_tab():
     assert rec.calls and set(rec.calls) == {"next_tab"}, rec.calls
 
 
+def three(eng, x, y):
+    eng.feed([{"id": i, "x": x + i * 0.05, "y": y, "tip": True} for i in range(3)], 1.6)
+
+
+def test_drag_survives_glitch_and_regrip_then_drops():
+    eng, rec = make_engine({})
+    ev = []
+    actions.mouse_down = lambda: ev.append("down")
+    actions.mouse_up = lambda: ev.append("up")
+    moves = []
+    actions.move_by = lambda dx, dy: moves.append((dx, dy))
+    three(eng, 0.3, 0.5)
+    for i in range(1, 6):
+        three(eng, 0.3 + i * 0.02, 0.5)
+    lift(eng)                         # glitch frame: looks like a lift
+    three(eng, 0.42, 0.5)             # fingers still there
+    assert ev == ["down"] and eng.state == "drag"
+    lift(eng)                         # real lift to re-grip...
+    eng.tick(time.time() + 0.2)       # ...back within the grace period
+    three(eng, 0.2, 0.5)
+    three(eng, 0.25, 0.5)
+    assert ev == ["down"] and eng.state == "drag"
+    lift(eng)
+    eng.tick(time.time() + 1.0)       # gone for good -> drop
+    assert ev == ["down", "up"] and eng.state == "idle"
+    assert moves and all(dx > 0 for dx, _ in moves)
+
+
 def test_middle_move_is_normal_mouse():
     eng, rec = make_engine({})
     touch(eng, 0.5, 0.5)

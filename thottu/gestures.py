@@ -28,7 +28,9 @@ MIN_STROKE = 0.08    # shortest stroke (pad fraction) we try to recognise
 N_POINTS = 64
 MATCH_THRESHOLD = 0.30
 WRITE_HOLD = 0.5     # two fingers still this long -> write mode
-DRAG_GAIN = 1.4     # full pad width moves the cursor 1.4 screen widths
+DRAG_GRACE = 0.5     # lift and put three fingers back within this -> still dragging
+DRAG_GLITCH = 0.15   # 1-2 finger frames shorter than this mid-drag are ignored
+DRAG_GAIN = 1.4    # full pad width moves the cursor 1.4 screen widths
 
 
 # ---------- templates ----------
@@ -161,6 +163,7 @@ class GestureEngine:
         self.anchor = None       # screen point where the drawing is shown
         self._drag_last = {}     # contact id -> (x, y) during three-finger drag
         self._drag_rem = [0.0, 0.0]
+        self._drag_lifted_at = 0.0
         self._label = None
         self._lock = threading.Lock()
         self._two_t0, self._two_p0, self._two_moved = 0.0, (0.0, 0.0), True
@@ -204,10 +207,23 @@ class GestureEngine:
             elif self.state in ("hold", "armed"):
                 log(f"lifted while {self.state} after {now - self._t0:.2f}s (no drawing)")
             elif self.state == "drag":
-                actions.mouse_up()
-                log("drag end")
+                # don't drop yet: glitchy frames and finger repositioning both look like a lift
+                self.state, self._drag_lifted_at = "drag_lifted", now
+                return
+            elif self.state == "drag_lifted":
+                return  # tick() drops it once the grace period passes
             self.state, self.stroke = "idle", []
             return
+
+        if self.state == "drag_lifted":
+            if len(down) >= 3:
+                self.state = "drag"         # fingers back: keep dragging
+                self._drag_last = {c["id"]: (c["x"], c["y"]) for c in down}
+                log("drag resumed")
+                return
+            if now - self._drag_lifted_at < DRAG_GLITCH:
+                return                      # a 1-2 finger blip mid-drag: ignore it
+            self._end_drag()                # something else started: drop first
 
         if self.state == "drag" or len(down) >= 3:
             self._drag(down)
@@ -281,6 +297,16 @@ class GestureEngine:
             self._slide_acc -= step if self._slide_acc > 0 else -step
             self.slider_text = LABELS[name]
             actions.run_now(name)
+
+    def _end_drag(self):
+        actions.mouse_up()
+        self.state, self.stroke = "idle", []
+        log("drag end")
+
+    def tick(self, now):
+        """Called ~60x/s: drops a drag once the fingers have really been off for a while."""
+        if self.state == "drag_lifted" and now - self._drag_lifted_at >= DRAG_GRACE:
+            self._end_drag()
 
     def _drag(self, down):
         """Three fingers: hold the left button and move the cursor. Lifting all fingers drops."""

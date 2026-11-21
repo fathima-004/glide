@@ -70,6 +70,7 @@ class Overlay:
         state = eng.state
         wr = eng.writer
         wr.tick(now)
+        eng.tick(now)
 
         if wr.active:
             self._draw_writer(wr, now)
@@ -105,7 +106,7 @@ class Overlay:
                 cv.create_oval(ex - 10, ey - 10, ex + 10, ey + 10, fill="#ffffff", outline="")
             self._pill(ax, ay - 46, "DRAW A SHORTCUT", GOLD)
 
-        elif state == "drag":
+        elif state in ("drag", "drag_lifted"):
             self._pill(cx + 70, cy + 34, "✋ Dragging", CYAN)
 
         lbl = eng.pop_label()
