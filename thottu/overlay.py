@@ -150,7 +150,7 @@ class Overlay:
         return self.canvas.create_polygon(pts, smooth=True, **kw)
 
     CARD_COLORS = {"As written": "#39f5ff", "English": "#39f5ff", "Translation": "#ff6fd8",
-                   "Or": "#8aa0b4"}
+                   "Or": "#8aa0b4", "\U0001F3A4 Voice note": "#7cff6b"}
 
     def _draw_cards(self, wr, ax, ay, now):
         cv = self.canvas
@@ -170,6 +170,25 @@ class Overlay:
             picked = wr.mode == "picked" and wr.picked == i
             if wr.mode == "picked" and not picked:
                 continue  # only the chosen card stays
+            if picked:
+                # the chosen word flies from its card down to the cursor and lands
+                p = min((now - wr._picked_t) / 0.45, 1.0)
+                e2 = p * p * (3 - 2 * p)
+                ccx, ccy = bx + cw / 2, by + ch / 2
+                fx, fy = ccx + (ax - ccx) * e2, ccy + (ay - ccy) * e2
+                size = int(34 - 16 * e2)
+                if p < 1:
+                    for k in range(1, 6):  # comet tail
+                        q = max(e2 - k * 0.06, 0)
+                        tx, ty = ccx + (ax - ccx) * q, ccy + (ay - ccy) * q
+                        cv.create_text(tx, ty, text=text, fill=_dim(col, 0.5 - k * 0.08),
+                                       font=("Nirmala UI", max(size - k, 10), "bold"))
+                    cv.create_text(fx, fy, text=text, fill="#ffffff", font=("Nirmala UI", size, "bold"))
+                else:
+                    r = 18 + 40 * min((now - wr._picked_t - 0.45) / 0.25, 1.0)  # landing ripple
+                    cv.create_oval(ax - r, ay - r, ax + r, ay + r, outline="#7cff6b", width=3)
+                    cv.create_text(ax, ay - 40, text="✓", fill="#7cff6b", font=("Segoe UI Black", 26))
+                continue
             grow = 10 if (on or picked) else 0
             if on or picked:  # glow
                 self._round_rect(bx - grow - 8, by - grow - 8, bx + cw + grow + 8, by + ch + grow + 8,

@@ -44,18 +44,34 @@ def test_write_mode_flow_manglish():
     eng.writer._last_change -= 2    # pretend 2 s passed
     eng.writer.tick(time.time())
     assert eng.writer.mode == "choosing", eng.writer.mode
-    assert [t for _, t in eng.writer.choices] == ["sari", "ശരി"]
+    assert eng.writer.choices == [("As written", "sari"),
+                                  ("മലയാളം", "ശരി"),
+                                  (writer.VOICE, "ശരി")]
 
-    # rest on the right half (2 choices -> right half = choice 2) until the ring fills
+    # 3 cards: left / middle / right thirds. Rest in the middle until the ring fills.
     one(eng, 0.2, 0.5)
     assert eng.writer.highlight == 0 and typed == []
-    one(eng, 0.8, 0.5)               # slide over: highlight follows, ring restarts
+    one(eng, 0.5, 0.5)               # slide over: highlight follows, ring restarts
     assert eng.writer.highlight == 1
     time.sleep(writer.DWELL + 0.05)
-    one(eng, 0.8, 0.5)
+    one(eng, 0.5, 0.5)
     assert typed == ["ശരി"] and eng.writer.mode == "picked"
     eng.writer.tick(time.time() + 1)
     assert not eng.writer.active
+
+
+def test_voice_card_sends_voice_note():
+    eng, rec = make_engine({})
+    sent = []
+    w = eng.writer
+    w._send_voice = lambda idx, text: sent.append(text)
+    writer.threading.Thread = _InlineThread
+    w.mode, w.anchor, w.choose_t0 = "choosing", (0, 0), time.time()
+    w.choices = [("As written", "sari"), (writer.VOICE, "ശരി")]
+    w._last_change = time.time()
+    w.feed([{"id": 0, "x": 0.9, "y": 0.5, "tip": True}], 1.6, time.time())
+    w.feed([{"id": 0, "x": 0.9, "y": 0.5, "tip": True}], 1.6, time.time() + writer.DWELL + 0.1)
+    assert sent == ["ശരി"]
 
 
 class _InlineThread:
@@ -74,3 +90,5 @@ if __name__ == "__main__":
     print("ok png")
     test_write_mode_flow_manglish()
     print("ok write flow")
+    test_voice_card_sends_voice_note()
+    print("ok voice card")

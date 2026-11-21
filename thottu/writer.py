@@ -52,7 +52,14 @@ def build_choices(result):
         if t and t not in seen:
             seen.add(t)
             out.append((label, t))
-    return out[:3]
+    out = out[:3]
+    # voice-note card: speak the Malayalam version if we have one, else the text as written
+    mal = next((t for _, t in out if any("ഀ" <= ch <= "ൿ" for ch in t)), None)
+    out.append((VOICE, mal or text))
+    return out
+
+
+VOICE = "\U0001F3A4 Voice note"
 
 
 class Writer:
@@ -122,8 +129,39 @@ class Writer:
         if self.progress >= 1.0:
             label, text = self.choices[idx]
             self.mode, self.picked, self._picked_t = "picked", idx, now
-            self.say("Typed ✓")
-            threading.Thread(target=_type_later, args=(text,), daemon=True).start()
+            if label == VOICE:
+                threading.Thread(target=self._send_voice, args=(idx, text), daemon=True).start()
+            else:
+                threading.Thread(target=_type_later, args=(text,), daemon=True).start()
+                _chime()
+
+    def _send_voice(self, idx, text):
+        """Make a Sarvam voice clip and paste it as a file (WhatsApp shows it, ✓ sends)."""
+        import os
+        import shutil
+        import subprocess
+        import tempfile
+        safe = "".join(ch for ch in text if ch.isalnum() or ch in " _-")[:30].strip() or "message"
+        folder = os.path.join(tempfile.gettempdir(), "thottu_voice")
+        os.makedirs(folder, exist_ok=True)
+        path = os.path.join(folder, f"Thottu voice - {safe}.wav")
+        src = self.audio.get(idx)
+        try:
+            if src and os.path.exists(src):
+                shutil.copyfile(src, path)
+            elif not sarvam.speak_to_file(text, path):
+                self.say("Voice failed")
+                return
+            subprocess.run(["powershell", "-NoProfile", "-Command",
+                            f"Set-Clipboard -LiteralPath '{path}'"],
+                           creationflags=0x08000000, timeout=10)
+            time.sleep(0.15)
+            actions.press("ctrl", "v")
+            _chime()
+            self.say("\U0001F3A4 Voice note ready — draw ✓ to send")
+        except Exception as e:
+            print("voice note failed:", e)
+            self.say("Voice failed")
 
     def _play(self, idx):
         path = self.audio.get(idx)
@@ -137,13 +175,26 @@ class Writer:
     def _prefetch_audio(self, choices):
         import os
         import tempfile
-        for i, (_, text) in enumerate(choices):
-            path = os.path.join(tempfile.gettempdir(), f"thottu_choice_{i}.wav")
+        is_mal = lambda t: any("ഀ" <= ch <= "ൿ" for ch in t)  # noqa: E731
+        # Malayalam first, so it can be spoken automatically as soon as it's ready
+        order = sorted(range(len(choices)), key=lambda i: not is_mal(choices[i][1]))
+        done, spoken = {}, False
+        for i in order:
+            text = choices[i][1]
+            if self.choices is not choices:
+                return  # a new word was written meanwhile
             try:
-                if sarvam.speak_to_file(text, path) and self.choices == choices:
-                    self.audio[i] = path
+                if text in done:
+                    self.audio[i] = done[text]
+                    continue
+                path = os.path.join(tempfile.gettempdir(), f"thottu_choice_{i}.wav")
+                if sarvam.speak_to_file(text, path):
+                    done[text] = self.audio[i] = path
                     if self.highlight == i:
                         self._play(i)  # finger was already waiting on this card
+                    elif self.highlight is None and not spoken and is_mal(text):
+                        self._play(i)  # auto-speak the Malayalam reading
+                        spoken = True
             except Exception as e:
                 print("tts failed:", e)
 
@@ -158,7 +209,7 @@ class Writer:
         elif self.mode == "choosing" and now - self._last_change > CHOICE_TIMEOUT \
                 and self._pick_p0 is None:
             self.cancel("Cancelled")
-        elif self.mode == "picked" and now - self._picked_t > 0.7:
+        elif self.mode == "picked" and now - self._picked_t > 0.85:
             self.cancel()
 
     def _read(self, strokes):
@@ -181,6 +232,38 @@ class Writer:
         self.mode, self._last_change, self._pick_p0 = "choosing", time.time(), None
         self.choose_t0 = time.time()
         threading.Thread(target=self._prefetch_audio, args=(choices,), daemon=True).start()
+
+
+_CHIME = None
+
+
+def _chime():
+    """Short soft two-note chime (generated once, played async)."""
+    global _CHIME
+    try:
+        import math
+        import os
+        import struct
+        import tempfile
+        import wave
+        import winsound
+        if _CHIME is None:
+            _CHIME = os.path.join(tempfile.gettempdir(), "thottu_chime.wav")
+            rate = 22050
+            frames = bytearray()
+            for freq, dur in ((880, 0.09), (1320, 0.16)):
+                n = int(rate * dur)
+                for i in range(n):
+                    env = min(i / 200, 1) * (1 - i / n)
+                    frames += struct.pack("<h", int(9000 * env * math.sin(2 * math.pi * freq * i / rate)))
+            with wave.open(_CHIME, "wb") as w:
+                w.setnchannels(1)
+                w.setsampwidth(2)
+                w.setframerate(rate)
+                w.writeframes(bytes(frames))
+        winsound.PlaySound(_CHIME, winsound.SND_FILENAME | winsound.SND_ASYNC)
+    except Exception as e:
+        print("chime failed:", e)
 
 
 def _type_later(text):
