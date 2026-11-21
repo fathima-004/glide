@@ -54,15 +54,15 @@ SECTIONS = [
         [("left", "key"), (" = volume  ·  ", ""), ("right", "key"), (" = brightness  ·  ", ""),
          ("top", "key"), (" = browser tabs", "")],
     ]),
-    ("WRITE", PINK, "write", "hold two fingers still, then write a word", [
-        [("Malayalam or English  →  cards:  ", ""), ("as written", "key"), ("  ·  ", ""),
-         ("മലയാളം", "ml"), (" (via Sarvam)  ·  ", ""), ("translation", "key"), ("  ·  ", ""),
-         ("🎤 voice note", "key")],
-        [("Rest a finger on a card to hear it; stay to choose.", "")],
+    ("WRITE", PINK, "write", "hold two fingers still, write one word at a time, stop 2 s", [
+        [("മലയാളം", "ml"), (" · Manglish · English · Arabic  →  pick ", ""), ("same language", "key"),
+         (" or ", ""), ("English", "key"), ("  (Malayalam by Sarvam AI)", "")],
+        [("WhatsApp: ", ""), ("Baba - varaam", "key"), (" → Baba, or ", ""), ("🎤 voice note", "key"),
+         ("   ·   Gmail: ", ""), ("ammu - report sent", "key"), (" → ammu@gmail.com", "")],
     ]),
     ("KEYS", GOLD, "keys", "anywhere, any time", [
-        [("Ctrl+Alt+N", "key"), (" teach your own shape  ·  ", ""), ("Ctrl+Alt+H", "key"),
-         (" this sheet  ·  ", ""), ("Ctrl+Alt+T", "key"), (" on / off  ·  ", ""),
+        [("Esc", "key"), (" cancel  ·  ", ""), ("Ctrl+Alt+N", "key"), (" teach a shape  ·  ", ""),
+         ("Ctrl+Alt+H", "key"), (" this sheet  ·  ", ""), ("Ctrl+Alt+T", "key"), (" on/off  ·  ", ""),
          ("Ctrl+Alt+Q", "key"), (" quit", "")],
     ]),
 ]

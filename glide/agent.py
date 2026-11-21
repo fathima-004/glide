@@ -156,7 +156,6 @@ def chrome_path():
 def open_in_chrome(url):
     path = chrome_path()
     if path:
-        import subprocess
         actions.run_hidden([path, url], wait=False)
     else:
         webbrowser.open(url)  # no Chrome installed: default browser
@@ -302,7 +301,6 @@ def send_text_here(contact, msg, status, cancelled):
 
 def send_voice_note(contact, path, status, cancelled, chat_open=False):
     """Open the contact's chat (unless it's open), paste the voice-note file, send after the countdown."""
-    import subprocess
     err = None if chat_open else open_chat(contact, status)
     if err:
         return err

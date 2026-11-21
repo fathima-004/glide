@@ -489,7 +489,6 @@ class Writer:
         phones and desktop; MP3 is the fallback. (WAV would arrive as a document.)
         """
         import os
-        import subprocess
         import tempfile
         safe = "".join(ch for ch in text if ch.isalnum() or ch in " _-" or "ഀ" <= ch <= "ൿ")
         safe = safe[:30].strip() or "message"
@@ -708,38 +707,6 @@ class Writer:
         self.choose_t0 = time.time()
         if VOICE_ENABLED:
             threading.Thread(target=self._prefetch_audio, args=(choices,), daemon=True).start()
-
-
-_CHIME = None
-
-
-def _chime():
-    """Short soft two-note chime (generated once, played async)."""
-    global _CHIME
-    try:
-        import math
-        import os
-        import struct
-        import tempfile
-        import wave
-        import winsound
-        if _CHIME is None:
-            _CHIME = os.path.join(tempfile.gettempdir(), "glide_chime.wav")
-            rate = 22050
-            frames = bytearray()
-            for freq, dur in ((880, 0.09), (1320, 0.16)):
-                n = int(rate * dur)
-                for i in range(n):
-                    env = min(i / 200, 1) * (1 - i / n)
-                    frames += struct.pack("<h", int(9000 * env * math.sin(2 * math.pi * freq * i / rate)))
-            with wave.open(_CHIME, "wb") as w:
-                w.setnchannels(1)
-                w.setsampwidth(2)
-                w.setframerate(rate)
-                w.writeframes(bytes(frames))
-        winsound.PlaySound(_CHIME, winsound.SND_FILENAME | winsound.SND_ASYNC)
-    except Exception as e:
-        print("chime failed:", e)
 
 
 def _type_later(text):

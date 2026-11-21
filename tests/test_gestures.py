@@ -1,5 +1,4 @@
 """Check each shape is recognised even when drawn wobbly, small, or stretched."""
-import math
 import random
 
 from glide.gestures import TEMPLATES, recognise
