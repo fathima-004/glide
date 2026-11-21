@@ -10,7 +10,7 @@ import tempfile
 import threading
 import time
 
-from . import actions
+from . import actions, shapes
 
 LOG_PATH = os.path.join(tempfile.gettempdir(), "thottu.log")
 
@@ -27,7 +27,9 @@ HOLD_SLOP = 0.015    # how far (pad fraction) the finger may wander while holdin
 MIN_STROKE = 0.08    # shortest stroke (pad fraction) we try to recognise
 N_POINTS = 64
 MATCH_THRESHOLD = 0.30
-WRITE_HOLD = 0.5     # two fingers still this long -> write mode
+CUSTOM_BONUS = 0.03  # learned shapes get a small edge over built-ins
+TEACH_CONSISTENCY = 0.38  # a teaching sample this far from the earlier ones is asked again
+WRITE_HOLD = 0.5    # two fingers still this long -> write mode
 DRAG_GRACE = 0.5     # lift and put three fingers back within this -> still dragging
 DRAG_GLITCH = 0.15   # 1-2 finger frames shorter than this mid-drag are ignored
 DRAG_GAIN = 1.4    # full pad width moves the cursor 1.4 screen widths
@@ -96,17 +98,30 @@ def _normalise(pts):
 _NORMALISED = [(name, _normalise(t)) for name, t in TEMPLATES]
 
 
-def recognise(points):
-    """Return (gesture name, score) — lower score is better — or (None, score)."""
+def _distance(a, b):
+    return sum(math.dist(p, q) for p, q in zip(a, b)) / N_POINTS
+
+
+def recognise(points, custom=None):
+    """Return (gesture name, score) — lower score is better — or (None, score).
+
+    custom: learned shapes (see shapes.py); a match is returned as "custom:<index>".
+    Learned shapes win ties, since they were drawn by this person's own hand.
+    """
     path = sum(math.dist(a, b) for a, b in zip(points, points[1:]))
     if path == 0 or math.dist(points[0], points[-1]) / path > 0.9:
         return None, 1.0  # a near-straight swipe is not a shortcut
     cand = _normalise(points)
     best, best_d = None, float("inf")
     for name, tmpl in _NORMALISED:
-        d = sum(math.dist(a, b) for a, b in zip(cand, tmpl)) / N_POINTS
+        d = _distance(cand, tmpl)
         if d < best_d:
             best, best_d = name, d
+    for i, shape in enumerate(custom or []):
+        for sample in shape["samples"]:
+            d = _distance(cand, sample) - CUSTOM_BONUS
+            if d < best_d:
+                best, best_d = f"custom:{i}", d
     return (best if best_d < MATCH_THRESHOLD else None), best_d
 
 
@@ -169,6 +184,8 @@ class GestureEngine:
         self._two_t0, self._two_p0, self._two_moved = 0.0, (0.0, 0.0), True
         from .writer import Writer
         self.writer = Writer(self._say)
+        self.teach = None        # {"label", "action", "samples"} while teaching a shape
+        self.ui_request = None   # set from other threads (tray/hotkey); the overlay opens the UI
 
     def pop_label(self):
         with self._lock:
@@ -342,12 +359,46 @@ class GestureEngine:
         if span < MIN_STROKE:
             log(f"stroke too small (span {span:.3f}, {len(pts)} pts)")
             return
-        name, score = recognise(pts)
-        best = min(((n, sum(math.dist(a, b) for a, b in zip(_normalise(pts), t)) / N_POINTS)
-                    for n, t in _NORMALISED), key=lambda x: x[1])
-        log(f"stroke span {span:.3f}, {len(pts)} pts -> {name} (closest {best[0]} {best[1]:.3f})")
+        if self.teach is not None:
+            self._teach_sample(pts)
+            return
+        learned = shapes.load()
+        name, score = recognise(pts, learned)
+        log(f"stroke span {span:.3f}, {len(pts)} pts -> {name} (score {score:.3f})")
         if name is None:
             self._say("?")
             return
+        if name.startswith("custom:"):
+            shape = learned[int(name.split(":")[1])]
+            self._say(shape["label"])
+            threading.Thread(target=shapes.run, args=(shape,), daemon=True).start()
+            return
         self._say(LABELS[name])
         threading.Thread(target=actions.run, args=(name,), daemon=True).start()
+
+    # ---------- teaching your own shape ----------
+    def start_teaching(self, label, action):
+        self.teach = {"label": label, "action": action, "samples": []}
+        log(f"teaching {label}")
+
+    def cancel_teaching(self):
+        self.teach = None
+
+    def _teach_sample(self, pts):
+        t = self.teach
+        sample = _normalise(pts)
+        if t["samples"]:
+            d = min(_distance(sample, s) for s in t["samples"])
+            if d > TEACH_CONSISTENCY:
+                log(f"teach sample rejected ({d:.3f})")
+                self._say("Different from before — draw it again")
+                return
+        t["samples"].append(sample)
+        n = len(t["samples"])
+        if n < shapes.SAMPLES_NEEDED:
+            self._say(f"Got it {n}/{shapes.SAMPLES_NEEDED} — again")
+            return
+        shapes.add(t["label"], t["action"], t["samples"])
+        self.teach = None
+        log(f"learned {t['label']}")
+        self._say(f"Learned! Draw it for {t['label']}")

@@ -48,7 +48,10 @@ def main():
             print(" | ".join(f"id{c['id']} {'DOWN' if c['tip'] else 'up  '} "
                              f"x={c['x']:.3f} y={c['y']:.3f}" for c in contacts), flush=True)
 
-    reader = TouchpadReader(on_frame, on_toggle=state.toggle)
+    def on_teach():
+        engine.ui_request = "teach"
+
+    reader = TouchpadReader(on_frame, on_toggle=state.toggle, on_teach=on_teach)
     reader.start()
     reader.ready.wait(5)
     if reader.error:

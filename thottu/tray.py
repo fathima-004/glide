@@ -22,11 +22,15 @@ class Tray:
             menu=pystray.Menu(
                 pystray.MenuItem(lambda _: "Turn OFF   (Ctrl+Alt+T)" if self.state.enabled
                                  else "Turn ON   (Ctrl+Alt+T)", self._toggle, default=True),
+                pystray.MenuItem("Teach a new shape…   (Ctrl+Alt+N)", self._teach),
                 pystray.MenuItem("Quit   (Ctrl+Alt+Q)", lambda: os._exit(0)),
             ))
 
     def _toggle(self):
         self.state.toggle()
+
+    def _teach(self):
+        self.state.engine.ui_request = "teach"
 
     def refresh(self):
         self.icon.icon = _icon(self.state.enabled)

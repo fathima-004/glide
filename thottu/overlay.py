@@ -71,6 +71,14 @@ class Overlay:
         wr = eng.writer
         wr.tick(now)
         eng.tick(now)
+        if eng.ui_request == "teach":
+            eng.ui_request = None
+            from .teach_ui import open_teach_window
+            open_teach_window(self.root, eng)
+        if eng.teach is not None:
+            n = len(eng.teach["samples"])
+            self._pill(self.sw // 2, 40, f"✨ Teaching “{eng.teach['label']}” — "
+                                          f"hold still, then draw your shape  ({n + 1}/3)", GOLD, size=14)
 
         if wr.active:
             self._draw_writer(wr, now)
