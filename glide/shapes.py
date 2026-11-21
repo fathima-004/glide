@@ -15,7 +15,7 @@ SAMPLES_NEEDED = 3
 
 # What a shape can do. "value" is filled from the dialog for the "…" ones.
 PRESETS = [
-    ("WhatsApp", {"type": "open", "value": "whatsapp:", "fallback": "https://web.whatsapp.com"}),
+    ("WhatsApp", {"type": "whatsapp_web"}),  # always WhatsApp Web in Chrome, never the app
     ("Gmail", {"type": "open", "value": "https://mail.google.com"}),
     ("YouTube", {"type": "open", "value": "https://www.youtube.com"}),
     ("Google Meet", {"type": "open", "value": "https://meet.google.com"}),
@@ -68,7 +68,13 @@ def run(shape):
     a = shape["action"]
     kind, value = a.get("type"), a.get("value", "")
     try:
-        if kind == "open":
+        if kind == "whatsapp_web" or str(value).startswith("whatsapp:"):  # old saves used the app link
+            from . import agent
+            agent.focus_whatsapp_in_chrome(lambda text: None)
+        elif kind == "open" and str(value).startswith("http"):
+            from . import agent
+            agent.open_in_chrome(value)  # websites always open in Chrome
+        elif kind == "open":
             try:
                 os.startfile(value)
             except OSError:
