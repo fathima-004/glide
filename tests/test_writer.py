@@ -145,7 +145,7 @@ def test_whatsapp_first_word_is_the_contact():
     from glide import agent
     opened, sent = [], []
     agent.open_chat = lambda contact, status: opened.append(contact)
-    agent.send_text_here = lambda contact, msg, status, cancelled: (sent.append((contact, msg)), "ok")[1]
+    agent.send_text_here = lambda contact, msg, status, cancelled: (sent.append((contact, msg)), "✓ sent")[1]
     eng, rec = make_engine({})
     w = eng.writer
     w.start((0, 0))
@@ -167,6 +167,38 @@ def test_whatsapp_first_word_is_the_contact():
     w._read([[(0, 0), (1, 1)]])
     assert w.mode == "choosing" and w.wa_contact == "Didi Ltst" and opened == ["Didi Ltst"]
     assert w.choices[0] == ("English", "Work is finished")
+
+
+def test_name_is_remembered_across_write_sessions():
+    """The user's bug: name -> write mode timed out -> wrote again -> it became a new contact."""
+    from glide import agent
+    opened, sent = [], []
+    agent.open_chat = lambda contact, status: opened.append(contact)
+    agent.send_text_here = lambda contact, msg, status, cancelled: (sent.append((contact, msg)), "✓ sent")[1]
+    writer.in_whatsapp_web = lambda: True
+    writer.threading.Thread = _InlineThread
+    sarvam.manglish_to_malayalam = lambda t: None
+    handwriting.ask_json = lambda prompt: {"english": "Thank you"}
+    eng, rec = make_engine({})
+    w = eng.writer
+    handwriting.recognise = lambda png: {"text": "Baba", "script": "latin", "language": "english"}
+    w.start((0, 0))
+    w._read([[(0, 0), (1, 1)]])
+    assert opened == ["Baba"] and w.mode == "writing"
+    w.tick(time.time() + writer.WAIT_FOR_MESSAGE + 1)    # nothing written in time: write mode off
+    assert not w.active
+    handwriting.recognise = lambda png: {"text": "شكرا", "script": "arabic", "language": "arabic"}
+    w.start((0, 0))                                      # a new write session, still in WhatsApp
+    assert w.wa_contact == "Baba" and w.chat_open
+    w._read([[(0, 0), (1, 1)]])
+    assert opened == ["Baba"], opened                    # NOT a search for the Arabic word
+    assert w.choices[0] == (writer.ARA, "شكرا")
+    w.feed([{"id": 0, "x": 0.1, "y": 0.5, "tip": True}], 1.6, time.time())
+    w.feed([{"id": 0, "x": 0.1, "y": 0.5, "tip": True}], 1.6, time.time() + writer.DWELL + 0.1)
+    assert sent == [("Baba", "شكرا")]
+    w.start((0, 0))                                      # after sending, start fresh with a name
+    assert w.wa_contact is None
+    writer.in_whatsapp_web = lambda: False
 
 
 def test_arabic_options():
@@ -270,5 +302,7 @@ if __name__ == "__main__":
     print("ok gmail first word is the address")
     test_arabic_options()
     print("ok arabic")
+    test_name_is_remembered_across_write_sessions()
+    print("ok name remembered across sessions")
     test_slant_swipes_pick_the_app()
     print("ok slant swipes")

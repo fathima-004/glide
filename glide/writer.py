@@ -17,6 +17,8 @@ from . import actions, handwriting, sarvam
 
 IDLE_TO_READ = 1.1     # seconds after last stroke before reading
 NOTHING_WRITTEN = 6.0  # leave write mode if nothing is written
+WAIT_FOR_MESSAGE = 20.0  # after a name/address, this long to start writing the message
+PENDING_SECONDS = 90.0   # a name stays chosen this long, even across write sessions
 CHOICE_TIMEOUT = 10.0
 DWELL = 0.8           # seconds on a card to type it
 SWIPE_TIME = 0.7      # a slant swipe is quick...
@@ -203,6 +205,7 @@ class Writer:
         self.chat_open = False    # their chat has been opened already
         self.in_gmail = False
         self.mail_to = None       # in Gmail: the address made from the first word
+        self._pending = None      # (kind, who, time): a name written whose message hasn't been sent
         self.header = ""          # shown above the cards, e.g. "To: Rashid"
         self._swipe = None        # (x, y, time) where the current touch started, for slant swipes
 
@@ -214,6 +217,13 @@ class Writer:
         self.in_whatsapp = in_whatsapp_web()  # the voice-note option only makes sense there
         self.in_gmail = not self.in_whatsapp and in_gmail()
         self.wa_contact, self.header, self.chat_open, self.mail_to = None, "", False, None
+        pending = self._pending
+        if pending and time.time() - pending[2] < PENDING_SECONDS:
+            kind, who, _ = pending
+            if kind == "whatsapp" and self.in_whatsapp:  # a name was written, the message wasn't yet
+                self.wa_contact, self.header, self.chat_open = who, f"To: {who}", True
+            elif kind == "mail" and self.in_gmail:
+                self.mail_to, self.header = who, f"To: {who}"
         self.mode, self.strokes, self.choices, self.anchor = "writing", [], [], anchor
         self._last_change, self._touching = time.time(), False
         self._await_release = True  # the two fingers that opened write mode are still down
@@ -346,6 +356,8 @@ class Writer:
         except Exception as e:
             print("mail failed:", e)
             result = "Couldn't send the mail — try again"
+        if str(result).startswith("\u2713"):
+            self._pending = None  # sent: the next writing starts with a name again
         self.cancel(result)
 
     def _wa_text(self, contact, text):
@@ -361,6 +373,8 @@ class Writer:
         except Exception as e:
             print("send failed:", e)
             result = "Couldn't send — try again"
+        if str(result).startswith("\u2713"):
+            self._pending = None  # sent: the next writing starts with a name again
         self.cancel(result)
 
     def _wa_voice(self, contact, text):
@@ -386,6 +400,8 @@ class Writer:
         except Exception as e:
             print("voice note failed:", e)
             result = "Voice failed — try again"
+        if str(result).startswith("\u2713"):
+            self._pending = None  # sent: the next writing starts with a name again
         self.cancel(result)
 
     def _agent_status(self, text):
@@ -491,8 +507,11 @@ class Writer:
     def tick(self, now):
         """Called ~60x/s from the overlay; handles timeouts with no finger frames."""
         if self.mode == "writing":
-            if not self.strokes and now - self._last_change > NOTHING_WRITTEN:
-                self.cancel("Write mode off")
+            wait = WAIT_FOR_MESSAGE if (self.wa_contact or self.mail_to) else NOTHING_WRITTEN
+            if not self.strokes and now - self._last_change > wait:
+                self.cancel("Write mode off" if not (self.wa_contact or self.mail_to) else
+                            f"Write mode off — {self.wa_contact or self.mail_to} is still chosen "
+                            f"for {int(PENDING_SECONDS)} s")
             elif self.strokes and not self._touching and now - self._last_change > IDLE_TO_READ:
                 self.mode = "reading"
                 threading.Thread(target=self._read, args=(list(self.strokes),), daemon=True).start()
@@ -534,6 +553,7 @@ class Writer:
                 self.cancel(err)
                 return
             self.chat_open = True
+            self._pending = ("whatsapp", self.wa_contact, time.time())
             if len(words) < 2:  # only the name so far: now write the message
                 self.mode, self.strokes, self._touching = "writing", [], False
                 self._await_release, self._last_change = False, time.time()
@@ -549,6 +569,7 @@ class Writer:
             who = words[0].strip(",.:-")
             self.mail_to = who if "@" in who else (contacts.email_of(who) or who.lower() + "@gmail.com")
             self.header = f"To: {self.mail_to}"
+            self._pending = ("mail", self.mail_to, time.time())
             if len(words) < 2:  # only the address so far: now write the mail
                 self.mode, self.strokes, self._touching = "writing", [], False
                 self._await_release, self._last_change = False, time.time()
