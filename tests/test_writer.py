@@ -1,4 +1,4 @@
-﻿"""Write mode end to end with fake fingers, fake Gemini and fake Sarvam."""
+"""Write mode end to end with fake fingers, fake Gemini and fake Sarvam."""
 import io
 import threading
 import time
@@ -169,8 +169,8 @@ def test_whatsapp_first_word_is_the_contact():
     assert w.choices[0] == ("English", "Work is finished")
 
 
-def test_name_is_remembered_across_write_sessions():
-    """The user's bug: name -> write mode timed out -> wrote again -> it became a new contact."""
+def test_each_writing_can_pick_a_different_contact():
+    """Every new writing in WhatsApp starts with a contact, so the person can change."""
     from glide import agent
     opened, sent = [], []
     agent.open_chat = lambda contact, status: opened.append(contact)
@@ -178,26 +178,23 @@ def test_name_is_remembered_across_write_sessions():
     writer.in_whatsapp_web = lambda: True
     writer.threading.Thread = _InlineThread
     sarvam.manglish_to_malayalam = lambda t: None
-    handwriting.ask_json = lambda prompt: {"english": "Thank you"}
+    sarvam.translate = lambda t, s, d: None
     eng, rec = make_engine({})
     w = eng.writer
     handwriting.recognise = lambda png: {"text": "Baba", "script": "latin", "language": "english"}
     w.start((0, 0))
-    w._read([[(0, 0), (1, 1)]])
+    w._read([[(0, 0), (1, 1)]])                          # only a name, then write mode times out
     assert opened == ["Baba"] and w.mode == "writing"
-    w.tick(time.time() + writer.WAIT_FOR_MESSAGE + 1)    # nothing written in time: write mode off
+    w.tick(time.time() + writer.WAIT_FOR_MESSAGE + 1)
     assert not w.active
-    handwriting.recognise = lambda png: {"text": "شكرا", "script": "arabic", "language": "arabic"}
-    w.start((0, 0))                                      # a new write session, still in WhatsApp
-    assert w.wa_contact == "Baba" and w.chat_open
+    handwriting.recognise = lambda png: {"text": "Rahul hello", "script": "latin", "language": "english"}
+    w.start((0, 0))                                      # new writing: a new contact
+    assert w.wa_contact is None
     w._read([[(0, 0), (1, 1)]])
-    assert opened == ["Baba"], opened                    # NOT a search for the Arabic word
-    assert w.choices[0] == (writer.ARA, "شكرا")
+    assert opened == ["Baba", "Rahul"] and w.wa_contact == "Rahul"
     w.feed([{"id": 0, "x": 0.1, "y": 0.5, "tip": True}], 1.6, time.time())
     w.feed([{"id": 0, "x": 0.1, "y": 0.5, "tip": True}], 1.6, time.time() + writer.DWELL + 0.1)
-    assert sent == [("Baba", "شكرا")]
-    w.start((0, 0))                                      # after sending, start fresh with a name
-    assert w.wa_contact is None
+    assert sent == [("Rahul", "hello")]
     writer.in_whatsapp_web = lambda: False
 
 
@@ -347,8 +344,8 @@ if __name__ == "__main__":
     print("ok gmail first word is the address")
     test_arabic_options()
     print("ok arabic")
-    test_name_is_remembered_across_write_sessions()
-    print("ok name remembered across sessions")
+    test_each_writing_can_pick_a_different_contact()
+    print("ok different contact each writing")
     test_whatsapp_word_by_word()
     print("ok whatsapp word by word")
     test_escape_aborts_a_pending_send()

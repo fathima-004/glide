@@ -19,6 +19,7 @@ IDLE_TO_READ = 1.1     # seconds after last stroke before reading
 NOTHING_WRITTEN = 6.0  # leave write mode if nothing is written
 WAIT_FOR_MESSAGE = 20.0  # after a name/address, this long to start writing the message
 PENDING_SECONDS = 90.0   # a name stays chosen this long, even across write sessions
+REMEMBER_NAME = False    # off: every new writing starts with a contact, so the person can change
 FINISH_AFTER = 2.0       # WhatsApp/Gmail: stop writing this long and the words are used
 CHOICE_TIMEOUT = 10.0
 DWELL = 0.8           # seconds on a card to type it
@@ -219,7 +220,7 @@ class Writer:
         self.in_whatsapp = in_whatsapp_web()  # the voice-note option only makes sense there
         self.in_gmail = not self.in_whatsapp and in_gmail()
         self.wa_contact, self.header, self.chat_open, self.mail_to = None, "", False, None
-        pending = self._pending
+        pending = self._pending if REMEMBER_NAME else None
         if pending and time.time() - pending[2] < PENDING_SECONDS:
             kind, who, _ = pending
             if kind == "whatsapp" and self.in_whatsapp:  # a name was written, the message wasn't yet
@@ -518,9 +519,7 @@ class Writer:
         if self.mode == "writing":
             wait = WAIT_FOR_MESSAGE if (self.wa_contact or self.mail_to) else NOTHING_WRITTEN
             if not self.strokes and not self.word_jobs and now - self._last_change > wait:
-                self.cancel("Write mode off" if not (self.wa_contact or self.mail_to) else
-                            f"Write mode off — {self.wa_contact or self.mail_to} is still chosen "
-                            f"for {int(PENDING_SECONDS)} s")
+                self.cancel("Write mode off")
             elif self.word_by_word and self.strokes and not self._touching \
                     and now - self._last_change > IDLE_TO_READ:
                 job = {"done": False, "text": None, "language": None}  # one word, read in the background
