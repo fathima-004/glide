@@ -30,6 +30,9 @@ class _InlineThread:
     def start(self):
         self.target(*self.args)
 
+    def join(self, *a):
+        pass
+
 
 def touch(eng, x, y, fid=0):
     eng.feed([{"id": fid, "x": x, "y": y, "tip": True}], 1.6)
