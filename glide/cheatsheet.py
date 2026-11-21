@@ -24,7 +24,8 @@ MUTED = "#7f93a6"
 EN = "Segoe UI"     # English text
 ML = "Nirmala UI"   # Malayalam text
 
-WIDTH, HEIGHT = 960, 620   # logical size at 100 % display scaling
+WIDTH, HEIGHT = 960, 650   # logical size at 100 % display scaling
+CREDITS = "Malayalam by Sarvam AI  ·  handwriting read by Google Gemini  ·  this cheat sheet was built by Devin"
 TIMEOUT_MS = 25_000        # auto-close delay
 TICK_MS = 50               # countdown bar refresh
 
@@ -60,7 +61,9 @@ SECTIONS = [
         [("Rest a finger on a card to hear it; stay to choose.", "")],
     ]),
     ("KEYS", GOLD, "keys", "anywhere, any time", [
-        [("Ctrl+Alt+T", "key"), (" on / off  ·  ", ""), ("Ctrl+Alt+Q", "key"), (" quit", "")],
+        [("Ctrl+Alt+N", "key"), (" teach your own shape  ·  ", ""), ("Ctrl+Alt+H", "key"),
+         (" this sheet  ·  ", ""), ("Ctrl+Alt+T", "key"), (" on / off  ·  ", ""),
+         ("Ctrl+Alt+Q", "key"), (" quit", "")],
     ]),
 ]
 
@@ -176,6 +179,7 @@ class CheatSheet:
         # Footer: how to close + countdown bar
         cv.create_text(self.w - s(40), s(80), anchor="e", fill=MUTED, font=self._font(10),
                        text="Esc or click to close")
+        cv.create_text(self.w / 2, self.h - s(20), text=CREDITS, fill=MUTED, font=self._font(9))
         self.bar = cv.create_rectangle(0, self.h - s(4), self.w, self.h, fill=CYAN, width=0)
 
     def _card(self, y, h, name, color, icon, hint, lines):

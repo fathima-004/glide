@@ -190,11 +190,12 @@ class _Device:
 class TouchpadReader(threading.Thread):
     """Background thread. Calls on_frame(contacts, aspect) for every touch frame."""
 
-    def __init__(self, on_frame, on_toggle=None, on_teach=None):
+    def __init__(self, on_frame, on_toggle=None, on_teach=None, on_help=None):
         super().__init__(daemon=True)
         self.on_frame = on_frame
         self.on_toggle = on_toggle
         self.on_teach = on_teach
+        self.on_help = on_help
         self.devices = {}
         self.hwnd = None
         self.ready = threading.Event()
@@ -215,6 +216,8 @@ class TouchpadReader(threading.Thread):
                 self.on_toggle()
             if wparam == 3 and self.on_teach:  # Ctrl+Alt+N teaches a new shape
                 self.on_teach()
+            if wparam == 4 and self.on_help:  # Ctrl+Alt+H shows the cheat sheet
+                self.on_help()
             return 0
         if msg == WM_DESTROY:
             user32.PostQuitMessage(0)
@@ -260,6 +263,7 @@ class TouchpadReader(threading.Thread):
         user32.RegisterHotKey(self.hwnd, 1, 0x0001 | 0x0002 | 0x4000, ord("Q"))  # Alt+Ctrl, no repeat
         user32.RegisterHotKey(self.hwnd, 2, 0x0001 | 0x0002 | 0x4000, ord("T"))
         user32.RegisterHotKey(self.hwnd, 3, 0x0001 | 0x0002 | 0x4000, ord("N"))
+        user32.RegisterHotKey(self.hwnd, 4, 0x0001 | 0x0002 | 0x4000, ord("H"))
         self.ready.set()
         msg = wt.MSG()
         while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:

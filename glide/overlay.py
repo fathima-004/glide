@@ -75,6 +75,10 @@ class Overlay:
             eng.ui_request = None
             from .teach_ui import open_teach_window
             open_teach_window(self.root, eng)
+        elif eng.ui_request == "cheatsheet":
+            eng.ui_request = None
+            from .cheatsheet import show_cheatsheet
+            show_cheatsheet()
         if eng.teach is not None:
             n = len(eng.teach["samples"])
             self._pill(self.sw // 2, 40, f"✨ Teaching “{eng.teach['label']}” — "
@@ -134,7 +138,7 @@ class Overlay:
         y0 = ay - bh - 70 if ay - bh - 70 > 20 else ay + 50
         if wr.mode in ("writing", "reading"):
             # no board: the ink is written straight over the screen, with a small hint above it
-            title = "✍ Write a word" if wr.mode == "writing" else "Reading…"
+            title = "✍ Write a word" if wr.mode == "writing" else "Reading with Gemini…"
             self._pill(x0 + bw / 2, y0 - 6, title, CYAN, size=12)
             a = self.engine.aspect or 1.6
             for s in list(wr.strokes):
@@ -201,8 +205,11 @@ class Overlay:
                              outline="#7cff6b" if picked else (col if on else "#2c3a48"),
                              width=4 if (on or picked) else 2)
             # tag
-            cv.create_text(bx + 18, by + 20, anchor="w", text=label, fill=col,
-                           font=("Nirmala UI", 12, "bold"))
+            tag = cv.create_text(bx + 18, by + 20, anchor="w", text=label, fill=col,
+                                 font=("Nirmala UI", 12, "bold"))
+            if label not in ("As written", "Or"):  # these cards come from Sarvam AI
+                cv.create_text(cv.bbox(tag)[2] + 8, by + 21, anchor="w", text="· Sarvam AI",
+                               fill="#8aa0b4", font=("Segoe UI", 9))
             # the word
             cv.create_text(bx + cw / 2, by + ch / 2 + 10, text=text, fill="#ffffff",
                            font=("Nirmala UI", 30 if len(text) < 10 else 20, "bold"), width=cw - 24)

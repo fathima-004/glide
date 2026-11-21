@@ -22,6 +22,8 @@ class Tray:
             menu=pystray.Menu(
                 pystray.MenuItem(lambda _: "Turn OFF   (Ctrl+Alt+T)" if self.state.enabled
                                  else "Turn ON   (Ctrl+Alt+T)", self._toggle, default=True),
+                pystray.MenuItem("Gesture cheat sheet   (Ctrl+Alt+H)",
+                                 lambda: setattr(self.state.engine, "ui_request", "cheatsheet")),
                 pystray.MenuItem("Teach a new shape…   (Ctrl+Alt+N)", self._teach),
                 pystray.MenuItem("Quit   (Ctrl+Alt+Q)", lambda: os._exit(0)),
             ))

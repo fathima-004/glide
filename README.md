@@ -20,8 +20,9 @@ python -m glide --debug          # print raw finger data
 ```
 
 - **Ctrl + Alt + T** turns Glide on / off (also from the tray icon near the clock)
+- **Ctrl + Alt + H** shows the gesture cheat sheet (also `python -m glide.cheatsheet`)
+- **Ctrl + Alt + N** teaches Glide a new shape
 - **Ctrl + Alt + Q** quits
-- `python -m glide.cheatsheet` opens a one-page gesture cheat sheet (Esc or click closes it)
 
 For three-finger drag, set Windows **Settings → Bluetooth & devices → Touchpad →
 Three-finger gestures → Swipes** to **Nothing**.
@@ -40,13 +41,31 @@ Three-finger gestures → Swipes** to **Nothing**.
 | Slide along the **left edge** | Volume |
 | Slide along the **right edge** | Brightness |
 | Slide along the **top edge** | Previous / next tab |
-| Hold **two fingers** still, then write a word | Choose: as written · Malayalam (from Manglish) · translation |
-
-Write mode reads your finger handwriting with **Gemini** and uses **Sarvam AI** for
-Malayalam: Manglish → Malayalam script (`sari` → ശരി) and Malayalam ↔ English translation.
-Set keys once: `setx GEMINI_API_KEY ...` and `setx SARVAM_API_KEY ...`.
+| Hold **two fingers** still, then write a word | Cards: as written · മലയാളം · translation · 🎤 voice note |
+| **Ctrl+Alt+N**, pick an action, draw your own shape 3× | Your shape now does that (e.g. **W** → WhatsApp) |
 
 Feedback appears right at the mouse cursor, so it's where you're already looking.
+
+Put API keys in a `.env` file next to this README (it is git-ignored):
+
+```
+GEMINI_API_KEY=...
+SARVAM_API_KEY=...
+```
+
+## Built with
+
+| | What it does in Glide |
+|---|---|
+| **[Sarvam AI](https://www.sarvam.ai)** | All the Malayalam: **transliterate** (Manglish → Malayalam script, `varam` → വരാം), **translate** (Malayalam ↔ English), and **Bulbul text-to-speech** — each choice card is read aloud, and the 🎤 card turns your written word into a Malayalam voice note for WhatsApp. |
+| **[Devin](https://devin.ai)** (Cognition) | Built the gesture **cheat sheet** ([`glide/cheatsheet.py`](glide/cheatsheet.py), PR #1) in parallel while the gestures were being built, and picked up the mid-hackathon rename on its own. |
+| **Google Gemini** | Reads finger handwriting (Malayalam or English) from an image of the strokes in ~2 s. |
+| **Win32 Raw Input + hid.dll** | Raw multi-finger data from the precision touchpad — no drivers, no extra hardware. |
+| **Claude Code** | Pair-programmed the app overnight. |
+
+## Author
+
+Made by **[@fathima-004](https://github.com/fathima-004)** at HackaThoni 2026, on a houseboat in Alappuzha.
 
 ## Status
 
@@ -56,5 +75,6 @@ Feedback appears right at the mouse cursor, so it's where you're already looking
 - [x] Three-finger drag, no pressing
 - [x] On/off toggle, tray icon, double-click launcher
 - [x] Corner actions + edge sliders (volume, brightness, tabs)
-- [x] Write Malayalam / English with your finger, Sarvam conversion, pick from 3 choices
-- [ ] Teach your own shape
+- [x] Write Malayalam / English with your finger, Sarvam conversion, spoken cards, voice note
+- [x] Teach your own shape
+- [x] Gesture cheat sheet (by Devin)

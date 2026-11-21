@@ -51,7 +51,10 @@ def main():
     def on_teach():
         engine.ui_request = "teach"
 
-    reader = TouchpadReader(on_frame, on_toggle=state.toggle, on_teach=on_teach)
+    def on_help():
+        engine.ui_request = "cheatsheet"
+
+    reader = TouchpadReader(on_frame, on_toggle=state.toggle, on_teach=on_teach, on_help=on_help)
     reader.start()
     reader.ready.wait(5)
     if reader.error:
