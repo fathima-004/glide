@@ -12,7 +12,7 @@ from PIL import Image, ImageDraw
 
 from .keys import get_key
 
-MODELS = ["gemini-flash-latest", "gemini-2.5-flash"]
+MODELS = ["gemini-flash-lite-latest", "gemini-3.5-flash-lite"]  # fast ones; tested on 21 Nov 2026
 PROMPT = (
     "This image is handwriting drawn with a finger on a laptop touchpad, so it is shaky. "
     "It is a short word or phrase in either Malayalam script or English/Latin letters "
@@ -22,7 +22,7 @@ PROMPT = (
 )
 
 
-def strokes_to_png(strokes, height=512, pad=40, width_px=10):
+def strokes_to_png(strokes, height=320, pad=28, width_px=8):
     """strokes: list of lists of (x, y), any scale, y down. Returns PNG bytes."""
     pts = [p for s in strokes for p in s]
     if not pts:
@@ -64,15 +64,24 @@ def recognise(png_bytes, timeout=10):
             {"text": PROMPT},
             {"inline_data": {"mime_type": "image/png", "data": base64.b64encode(png_bytes).decode()}},
         ]}],
-        "generationConfig": {"responseMimeType": "application/json", "temperature": 0},
+        "generationConfig": {"responseMimeType": "application/json", "temperature": 0,
+                             "thinkingConfig": {"thinkingLevel": "minimal"}},  # ~2 s instead of ~8 s
     }
     for model in models:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
         try:
-            r = requests.post(url, params={"key": key}, json=body, timeout=timeout)
-            if r.status_code == 404:
-                continue  # model name not available; try the next
-            r.raise_for_status()
+            # key in a header, never in the URL, so it can't leak into logs or error messages
+            r = requests.post(url, headers={"x-goog-api-key": key}, json=body, timeout=timeout)
+            if r.status_code == 400 and "hinking" in r.text:
+                b2 = {**body, "generationConfig": {k: v for k, v in body["generationConfig"].items()
+                                                   if k != "thinkingConfig"}}
+                r = requests.post(url, headers={"x-goog-api-key": key}, json=b2, timeout=timeout)
+            if r.status_code in (404, 429, 503):
+                print(f"handwriting: {model} unavailable ({r.status_code}), trying next")
+                continue
+            if not r.ok:
+                print(f"handwriting: {model} HTTP {r.status_code}: {r.text[:120]}")
+                continue
             text = r.json()["candidates"][0]["content"]["parts"][0]["text"]
             out = json.loads(text)
             out["text"] = str(out.get("text", "")).strip().strip('"')
@@ -80,7 +89,7 @@ def recognise(png_bytes, timeout=10):
             out["alternatives"] = [str(a).strip() for a in out.get("alternatives", []) if str(a).strip()]
             return out if out["text"] else None
         except (requests.RequestException, KeyError, IndexError, ValueError) as e:
-            print(f"handwriting: {model} failed: {e}")
+            print(f"handwriting: {model} failed: {type(e).__name__}")
     return None
 
 

@@ -1,4 +1,4 @@
-"""Write mode end to end with fake fingers, fake Gemini and fake Sarvam."""
+﻿"""Write mode end to end with fake fingers, fake Gemini and fake Sarvam."""
 import io
 import time
 
@@ -17,9 +17,9 @@ def one(eng, x, y):
     eng.feed([{"id": 0, "x": x, "y": y, "tip": True}], 1.6)
 
 
-def test_png_is_512_tall():
+def test_png_is_320_tall():
     png = handwriting.strokes_to_png([[(0, 0), (1, 1)], [(1, 0), (0, 1)]])
-    assert Image.open(io.BytesIO(png)).size[1] == 512
+    assert Image.open(io.BytesIO(png)).size[1] == 320
 
 
 def test_write_mode_flow_manglish():
@@ -66,7 +66,7 @@ class _InlineThread:
 
 
 if __name__ == "__main__":
-    test_png_is_512_tall()
+    test_png_is_320_tall()
     print("ok png")
     test_write_mode_flow_manglish()
     print("ok write flow")
