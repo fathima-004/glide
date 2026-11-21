@@ -205,6 +205,9 @@ class TouchpadReader(threading.Thread):
             except Exception as e:  # never let a bad report kill the loop
                 print("touchpad parse error:", e)
             return user32.DefWindowProcW(hwnd, msg, wparam, lparam)
+        if msg == 0x0312:  # WM_HOTKEY: Ctrl+Alt+Q quits Thottu
+            import os
+            os._exit(0)
         if msg == WM_DESTROY:
             user32.PostQuitMessage(0)
             return 0
@@ -246,6 +249,7 @@ class TouchpadReader(threading.Thread):
             self.error = f"RegisterRawInputDevices failed ({ctypes.get_last_error()})"
             self.ready.set()
             return
+        user32.RegisterHotKey(self.hwnd, 1, 0x0001 | 0x0002 | 0x4000, ord("Q"))  # Alt+Ctrl, no repeat
         self.ready.set()
         msg = wt.MSG()
         while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:

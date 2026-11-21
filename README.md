@@ -18,6 +18,8 @@ python -m thottu           # glowing finger-trail overlay
 python -m thottu --debug   # print raw finger data
 ```
 
+Press **Ctrl + Alt + Q** to quit.
+
 ## Status
 
 - [x] Read raw multi-finger contacts (Win32 Raw Input + hid.dll)
